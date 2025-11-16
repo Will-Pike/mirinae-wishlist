@@ -495,6 +495,105 @@ body {
   background: #d0d0d0;
 }
 
+/* Purchased Items Section */
+.purchased-items-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.purchased-items-section h2 {
+  color: #333;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+}
+
+.purchased-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.purchased-item-card {
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.purchased-item-card h3 {
+  color: #333;
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.purchasers-list {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.purchaser-info {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.purchaser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.purchaser-header strong {
+  color: #667eea;
+  font-size: 1rem;
+}
+
+.purchase-date {
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.purchaser-message {
+  color: #555;
+  font-style: italic;
+  margin: 0.5rem 0 0 0;
+  line-height: 1.5;
+}
+
+/* Purchase Modal Specific Styles */
+.purchase-modal {
+  max-width: 500px;
+}
+
+.purchase-confirm-text {
+  color: #555;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.purchase-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.message-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .header h1 {

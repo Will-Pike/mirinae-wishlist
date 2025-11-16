@@ -112,6 +112,8 @@ app.patch('/api/items/:id/quantity', (req, res) => {
 app.post('/api/items/:id/purchase', (req, res) => {
   try {
     const { id } = req.params;
+    const { purchaserName, purchaserMessage } = req.body;
+    
     const item = db.get('items')
       .find({ id: parseInt(id) })
       .value();
@@ -123,6 +125,18 @@ app.post('/api/items/:id/purchase', (req, res) => {
     let newQuantity = item.quantity - 1;
     let purchased = item.purchased;
 
+    // Initialize purchasers array if it doesn't exist
+    if (!item.purchasers) {
+      item.purchasers = [];
+    }
+
+    // Add purchaser info
+    const purchaserInfo = {
+      name: purchaserName || 'Anonymous',
+      message: purchaserMessage || '',
+      purchasedAt: new Date().toISOString()
+    };
+
     // If quantity reaches 0, mark as fully purchased
     if (newQuantity <= 0) {
       newQuantity = 0;
@@ -131,7 +145,11 @@ app.post('/api/items/:id/purchase', (req, res) => {
 
     db.get('items')
       .find({ id: parseInt(id) })
-      .assign({ quantity: newQuantity, purchased })
+      .assign({ 
+        quantity: newQuantity, 
+        purchased,
+        purchasers: [...item.purchasers, purchaserInfo]
+      })
       .write();
     
     const updatedItem = db.get('items')

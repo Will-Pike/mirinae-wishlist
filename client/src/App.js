@@ -9,6 +9,10 @@ function App() {
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [password, setPassword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [selectedItemToPurchase, setSelectedItemToPurchase] = useState(null);
+  const [purchaserName, setPurchaserName] = useState('');
+  const [purchaserMessage, setPurchaserMessage] = useState('');
 
   const API_URL = process.env.NODE_ENV === 'production' 
     ? '/api' 
@@ -57,17 +61,43 @@ function App() {
     }
   };
 
-  const handlePurchase = async (id) => {
+  const handlePurchaseClick = (item) => {
+    setSelectedItemToPurchase(item);
+    setShowPurchaseModal(true);
+  };
+
+  const handlePurchaseConfirm = async () => {
+    if (!selectedItemToPurchase) return;
+
     try {
-      const response = await fetch(`${API_URL}/items/${id}/purchase`, {
-        method: 'POST'
+      const response = await fetch(`${API_URL}/items/${selectedItemToPurchase.id}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purchaserName: purchaserName.trim(),
+          purchaserMessage: purchaserMessage.trim()
+        })
       });
       
       const updatedItem = await response.json();
-      setItems(items.map(item => item.id === id ? updatedItem : item));
+      setItems(items.map(item => item.id === selectedItemToPurchase.id ? updatedItem : item));
+      
+      // Close modal and reset
+      setShowPurchaseModal(false);
+      setSelectedItemToPurchase(null);
+      setPurchaserName('');
+      setPurchaserMessage('');
     } catch (error) {
       console.error('Error marking as purchased:', error);
+      alert('Error processing purchase. Please try again.');
     }
+  };
+
+  const handlePurchaseCancel = () => {
+    setShowPurchaseModal(false);
+    setSelectedItemToPurchase(null);
+    setPurchaserName('');
+    setPurchaserMessage('');
   };
 
   const handleDelete = async (id) => {
@@ -122,7 +152,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="header-text">
-            <h1>🎁 Mirinae's Wishlist</h1>
+            <h1>💫 Mirinae's Wishlist 🎁</h1>
             {/* <p className="subtitle">Help make Mirinae's wishes come true!</p> */}
           </div>
           {/* Hidden admin button - click the star */}
@@ -168,10 +198,91 @@ function App() {
         </div>
       )}
 
+      {/* Purchase confirmation modal */}
+      {showPurchaseModal && selectedItemToPurchase && (
+        <div className="modal-overlay" onClick={handlePurchaseCancel}>
+          <div className="modal-content purchase-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>🎉 Confirm Purchase</h2>
+            <p className="purchase-confirm-text">
+              You're about to mark <strong>{selectedItemToPurchase.title}</strong> as purchased!
+            </p>
+            <div className="purchase-form">
+              <input
+                type="text"
+                placeholder="Your name (optional)"
+                value={purchaserName}
+                onChange={(e) => setPurchaserName(e.target.value)}
+                className="input-field"
+              />
+              <textarea
+                placeholder="Leave a message for Mirinae (optional)"
+                value={purchaserMessage}
+                onChange={(e) => setPurchaserMessage(e.target.value)}
+                className="input-field message-textarea"
+                rows="3"
+              />
+            </div>
+            <div className="modal-buttons">
+              <button 
+                type="button"
+                className="btn btn-primary"
+                onClick={handlePurchaseConfirm}
+              >
+                Confirm Purchase
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-cancel"
+                onClick={handlePurchaseCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="container">
         {isAdmin && (
-          <div className="add-item-form">
-          <h2>Add New Item</h2>
+          <>
+            {/* Purchased Items Section */}
+            <div className="purchased-items-section">
+              <h2>Purchased Items & Messages</h2>
+              {items.filter(item => item.purchasers && item.purchasers.length > 0).length === 0 ? (
+                <p className="empty-message">No purchases yet.</p>
+              ) : (
+                <div className="purchased-items-grid">
+                  {items
+                    .filter(item => item.purchasers && item.purchasers.length > 0)
+                    .map((item) => (
+                      <div key={item.id} className="purchased-item-card">
+                        <h3>{item.title}</h3>
+                        <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
+                          {item.category || 'Other'}
+                        </span>
+                        <div className="purchasers-list">
+                          {item.purchasers.map((purchaser, idx) => (
+                            <div key={idx} className="purchaser-info">
+                              <div className="purchaser-header">
+                                <strong>{purchaser.name}</strong>
+                                <span className="purchase-date">
+                                  {new Date(purchaser.purchasedAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              {purchaser.message && (
+                                <p className="purchaser-message">"{purchaser.message}"</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="add-item-form">
+              <h2>Add New Item</h2>
           <form onSubmit={handleAddItem}>
             <input
               type="text"
@@ -234,6 +345,7 @@ function App() {
             <button type="submit" className="btn btn-primary">Add to Wishlist</button>
           </form>
         </div>
+          </>
         )}
 
         <div className="wishlist">
@@ -247,9 +359,11 @@ function App() {
                 className="filter-select"
               >
                 <option value="All">All Categories</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
+                {categories
+                  .filter(cat => items.some(item => item.category === cat))
+                  .map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
               </select>
             </div>
           </div>
@@ -317,7 +431,7 @@ function App() {
                     
                     {!item.purchased && (
                       <button 
-                        onClick={() => handlePurchase(item.id)}
+                        onClick={() => handlePurchaseClick(item)}
                         className="btn btn-secondary"
                       >
                         I'll Buy This!
