@@ -13,6 +13,9 @@ function App() {
   const [selectedItemToPurchase, setSelectedItemToPurchase] = useState(null);
   const [purchaserName, setPurchaserName] = useState('');
   const [purchaserMessage, setPurchaserMessage] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [draggedItem, setDraggedItem] = useState(null);
 
   const API_URL = process.env.NODE_ENV === 'production' 
     ? '/api' 
@@ -100,6 +103,86 @@ function App() {
     setPurchaserMessage('');
   };
 
+  const handleEditClick = (item) => {
+    setEditingItem({...item});
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editingItem || !editingItem.title.trim()) {
+      alert('Please enter a title');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/items/${editingItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingItem)
+      });
+      
+      const updatedItem = await response.json();
+      setItems(items.map(item => item.id === updatedItem.id ? updatedItem : item));
+      
+      setShowEditModal(false);
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Error updating item:', error);
+      alert('Error updating item. Please try again.');
+    }
+  };
+
+  const handleEditCancel = () => {
+    setShowEditModal(false);
+    setEditingItem(null);
+  };
+
+  const handleRestore = async (id) => {
+    if (!window.confirm('Are you sure you want to restore this item and remove all purchase records?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/items/${id}/restore`, {
+        method: 'POST'
+      });
+      
+      const updatedItem = await response.json();
+      setItems(items.map(item => item.id === id ? updatedItem : item));
+    } catch (error) {
+      console.error('Error restoring item:', error);
+      alert('Error restoring item. Please try again.');
+    }
+  };
+
+  const handleDragStart = (e, item) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetItem) => {
+    e.preventDefault();
+    
+    if (!draggedItem || draggedItem.id === targetItem.id) {
+      return;
+    }
+
+    const draggedIndex = items.findIndex(item => item.id === draggedItem.id);
+    const targetIndex = items.findIndex(item => item.id === targetItem.id);
+
+    const newItems = [...items];
+    newItems.splice(draggedIndex, 1);
+    newItems.splice(targetIndex, 0, draggedItem);
+
+    setItems(newItems);
+    setDraggedItem(null);
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       try {
@@ -152,17 +235,18 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="header-text">
-            <h1>💫 Mirinae's Wishlist 🎁</h1>
+            <h1>
+              <span 
+                className="admin-emoji"
+                onClick={() => !isAdmin ? setShowPasswordPrompt(true) : handleLogout()}
+                title={isAdmin ? "Logout" : "Admin"}
+              >
+                {isAdmin ? '🔓' : '💫'}
+              </span>
+              {' '}Mirinae's Wishlist 🎁
+            </h1>
             {/* <p className="subtitle">Help make Mirinae's wishes come true!</p> */}
           </div>
-          {/* Hidden admin button - click the star */}
-          <button 
-            className="admin-button"
-            onClick={() => !isAdmin ? setShowPasswordPrompt(true) : handleLogout()}
-            title={isAdmin ? "Logout" : "Admin"}
-          >
-            {isAdmin ? '🔓' : '⭐'}
-          </button>
         </div>
       </header>
 
@@ -242,6 +326,85 @@ function App() {
         </div>
       )}
 
+      {/* Edit item modal */}
+      {showEditModal && editingItem && (
+        <div className="modal-overlay" onClick={handleEditCancel}>
+          <div className="modal-content edit-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>✎ Edit Item</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleEditSave(); }}>
+              <input
+                type="text"
+                placeholder="Gift name or experience"
+                value={editingItem.title}
+                onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
+                className="input-field"
+              />
+              <input
+                type="url"
+                placeholder="Product link (optional)"
+                value={editingItem.link || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, link: e.target.value })}
+                className="input-field"
+              />
+              <div className="form-row">
+                <select
+                  value={editingItem.category}
+                  onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                  className="input-field category-select"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Quantity"
+                  value={editingItem.quantity}
+                  onChange={(e) => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 0 })}
+                  className="input-field quantity-input"
+                />
+              </div>
+              
+              {editingItem.category === 'Cash Gift' && (
+                <div className="cash-gift-fields">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Amount (e.g., 25.00)"
+                    value={editingItem.price || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
+                    className="input-field"
+                  />
+                  <select
+                    value={editingItem.secondaryCategory || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, secondaryCategory: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Select category for this gift (optional)</option>
+                    {secondaryCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              <div className="modal-buttons">
+                <button type="submit" className="btn btn-primary">Save Changes</button>
+                <button 
+                  type="button" 
+                  className="btn btn-cancel"
+                  onClick={handleEditCancel}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="container">
         {isAdmin && (
           <>
@@ -256,10 +419,22 @@ function App() {
                     .filter(item => item.purchasers && item.purchasers.length > 0)
                     .map((item) => (
                       <div key={item.id} className="purchased-item-card">
-                        <h3>{item.title}</h3>
-                        <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
-                          {item.category || 'Other'}
-                        </span>
+                        <div className="purchased-item-header">
+                          <div>
+                            <h3>{item.title}</h3>
+                            <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
+                              {item.category || 'Other'}
+                            </span>
+                          </div>
+                          {item.purchased && (
+                            <button 
+                              onClick={() => handleRestore(item.id)}
+                              className="btn btn-restore"
+                            >
+                              Restore
+                            </button>
+                          )}
+                        </div>
                         <div className="purchasers-list">
                           {item.purchasers.map((purchaser, idx) => (
                             <div key={idx} className="purchaser-info">
@@ -374,72 +549,99 @@ function App() {
             <div className="items-grid">
               {items
                 .filter(item => selectedCategory === 'All' || item.category === selectedCategory)
-                .map((item) => (
-                <div 
-                  key={item.id} 
-                  className={`item-card ${item.purchased ? 'purchased' : ''}`}
-                >
-                  <div className="item-header">
-                    <div className="item-header-left">
-                      <div className="category-badges">
-                        <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
-                          {item.category || 'Other'}
-                        </span>
-                        {item.category === 'Cash Gift' && item.secondaryCategory && (
-                          <span className={`category-badge ${item.secondaryCategory.toLowerCase().replace(' ', '-')}`}>
-                            {item.secondaryCategory}
+                .map((item) => {
+                  const totalQuantity = (item.purchasers?.length || 0) + item.quantity;
+                  const purchasedCount = item.purchasers?.length || 0;
+                  
+                  return (
+                  <div 
+                    key={item.id} 
+                    className={`item-card ${item.purchased ? 'purchased' : ''} ${isAdmin ? 'draggable' : ''}`}
+                    draggable={isAdmin}
+                    onDragStart={(e) => isAdmin && handleDragStart(e, item)}
+                    onDragOver={(e) => isAdmin && handleDragOver(e)}
+                    onDrop={(e) => isAdmin && handleDrop(e, item)}
+                  >
+                    <div className="item-header">
+                      <div className="item-header-left">
+                        <div className="category-badges">
+                          <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
+                            {item.category || 'Other'}
                           </span>
+                          {item.category === 'Cash Gift' && item.secondaryCategory && (
+                            <span className={`category-badge ${item.secondaryCategory.toLowerCase().replace(' ', '-')}`}>
+                              {item.secondaryCategory}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="item-title">{item.title}</h3>
+                        {item.category === 'Cash Gift' && item.price && (
+                          <div className="price-display">${parseFloat(item.price).toFixed(2)}</div>
                         )}
                       </div>
-                      <h3 className="item-title">{item.title}</h3>
-                      {item.category === 'Cash Gift' && item.price && (
-                        <div className="price-display">${parseFloat(item.price).toFixed(2)}</div>
-                      )}
-                    </div>
-                    {isAdmin && (
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="btn-delete"
-                        title="Delete item"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                  
-                  {item.link && (
-                    <a 
-                      href={item.link} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="item-link"
-                    >
-                      View Product →
-                    </a>
-                  )}
-                  
-                  <div className="item-footer">
-                    <div className="quantity-badge">
-                      {item.purchased ? (
-                        <span className="status-purchased">✓ All Purchased</span>
-                      ) : (
-                        <span className="status-available">
-                          {item.quantity} available
-                        </span>
+                      {isAdmin && (
+                        <div className="admin-controls">
+                          <button 
+                            onClick={() => handleEditClick(item)}
+                            className="btn-edit"
+                            title="Edit item"
+                          >
+                            ✎
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="btn-delete"
+                            title="Delete item"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       )}
                     </div>
                     
-                    {!item.purchased && (
-                      <button 
-                        onClick={() => handlePurchaseClick(item)}
-                        className="btn btn-secondary"
+                    {item.link && (
+                      <a 
+                        href={item.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="item-link"
                       >
-                        I'll Buy This!
-                      </button>
+                        View Product →
+                      </a>
                     )}
+                    
+                    <div className="item-footer">
+                      <div className="quantity-badge">
+                        {item.purchased ? (
+                          <span className="status-purchased">✓ All Purchased</span>
+                        ) : (
+                          <span className="status-available">
+                            {purchasedCount} of {totalQuantity} purchased
+                          </span>
+                        )}
+                      </div>
+                      
+                      {!item.purchased && !isAdmin && (
+                        <button 
+                          onClick={() => handlePurchaseClick(item)}
+                          className="btn btn-secondary"
+                        >
+                          I bought this!
+                        </button>
+                      )}
+                      
+                      {item.purchased && isAdmin && (
+                        <button 
+                          onClick={() => handleRestore(item.id)}
+                          className="btn btn-restore"
+                        >
+                          Restore Item
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )}
+              )}
             </div>
           )}
         </div>

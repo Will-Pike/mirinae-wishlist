@@ -50,20 +50,18 @@ body {
   font-size: 1.1rem;
 }
 
-.admin-button {
-  background: transparent;
-  border: none;
-  font-size: 1.5rem;
+.admin-emoji {
   cursor: pointer;
-  padding: 0.5rem;
-  opacity: 0.3;
+  opacity: 0.5;
   transition: all 0.3s;
+  display: inline-block;
+  padding: 0 0.25rem;
   border-radius: 8px;
 }
 
-.admin-button:hover {
+.admin-emoji:hover {
   opacity: 1;
-  transform: scale(1.2);
+  transform: scale(1.15);
   background: rgba(102, 126, 234, 0.1);
 }
 
@@ -242,6 +240,14 @@ body {
   background: #f0f0f0;
 }
 
+.item-card.draggable {
+  cursor: move;
+}
+
+.item-card.draggable:active {
+  opacity: 0.7;
+}
+
 .item-header {
   display: flex;
   justify-content: space-between;
@@ -341,6 +347,31 @@ body {
   color: #999;
 }
 
+.admin-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-edit {
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.btn-edit:hover {
+  background: #5568d3;
+  transform: scale(1.1);
+}
+
 .btn-delete {
   background: #ff4757;
   color: white;
@@ -359,6 +390,22 @@ body {
 .btn-delete:hover {
   background: #ee2e3f;
   transform: rotate(90deg);
+}
+
+.btn-restore {
+  background: #f59e0b;
+  color: white;
+  font-size: 0.9rem;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 600;
+}
+
+.btn-restore:hover {
+  background: #d97706;
 }
 
 .item-link {
@@ -523,6 +570,14 @@ body {
   padding: 1.5rem;
 }
 
+.purchased-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .purchased-item-card h3 {
   color: #333;
   font-size: 1.2rem;
@@ -594,21 +649,27 @@ body {
   font-family: inherit;
 }
 
+/* Edit Modal Specific Styles */
+.edit-modal {
+  max-width: 500px;
+}
+
+.edit-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .header h1 {
-    font-size: 2rem;
+    font-size: 1.6rem;
+    white-space: nowrap;
   }
 
   .header-content {
     flex-direction: column;
     gap: 1rem;
-  }
-
-  .admin-button {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
   }
 
   .container {

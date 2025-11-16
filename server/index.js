@@ -162,6 +162,78 @@ app.post('/api/items/:id/purchase', (req, res) => {
   }
 });
 
+// Update/Edit item
+app.put('/api/items/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, link, quantity, category, price, secondaryCategory } = req.body;
+    
+    const item = db.get('items')
+      .find({ id: parseInt(id) })
+      .value();
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const updates = {
+      title: title !== undefined ? title : item.title,
+      link: link !== undefined ? link : item.link,
+      quantity: quantity !== undefined ? quantity : item.quantity,
+      category: category !== undefined ? category : item.category,
+      price: price !== undefined ? price : item.price,
+      secondaryCategory: secondaryCategory !== undefined ? secondaryCategory : item.secondaryCategory
+    };
+
+    db.get('items')
+      .find({ id: parseInt(id) })
+      .assign(updates)
+      .write();
+    
+    const updatedItem = db.get('items')
+      .find({ id: parseInt(id) })
+      .value();
+    
+    res.json(updatedItem);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Restore purchased item
+app.post('/api/items/:id/restore', (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = db.get('items')
+      .find({ id: parseInt(id) })
+      .value();
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Get the original quantity from purchasers length + current quantity
+    const originalQuantity = (item.purchasers?.length || 0) + item.quantity;
+
+    db.get('items')
+      .find({ id: parseInt(id) })
+      .assign({ 
+        purchased: 0,
+        quantity: originalQuantity,
+        purchasers: []
+      })
+      .write();
+    
+    const updatedItem = db.get('items')
+      .find({ id: parseInt(id) })
+      .value();
+    
+    res.json(updatedItem);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete item
 app.delete('/api/items/:id', (req, res) => {
   try {
