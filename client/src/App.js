@@ -1,0 +1,341 @@
+import React, { useState, useEffect } from 'react';
+import './App.css';
+
+function App() {
+  const [items, setItems] = useState([]);
+  const [newItem, setNewItem] = useState({ title: '', link: '', quantity: 1, category: 'Books', price: '', secondaryCategory: '' });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [password, setPassword] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const API_URL = process.env.NODE_ENV === 'production' 
+    ? '/api' 
+    : `http://${window.location.hostname}:3001/api`;
+
+  const categories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Cash Gift', 'Other'];
+  const secondaryCategories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Other'];
+
+  useEffect(() => {
+    fetchItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchItems = async () => {
+    try {
+      const response = await fetch(`${API_URL}/items`);
+      const data = await response.json();
+      setItems(data);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    
+    if (!newItem.title.trim()) {
+      alert('Please enter a title');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem)
+      });
+      
+      const data = await response.json();
+      setItems([data, ...items]);
+      setNewItem({ title: '', link: '', quantity: 1, category: 'Books', price: '', secondaryCategory: '' });
+    } catch (error) {
+      console.error('Error adding item:', error);
+    }
+  };
+
+  const handlePurchase = async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/items/${id}/purchase`, {
+        method: 'POST'
+      });
+      
+      const updatedItem = await response.json();
+      setItems(items.map(item => item.id === id ? updatedItem : item));
+    } catch (error) {
+      console.error('Error marking as purchased:', error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      try {
+        await fetch(`${API_URL}/items/${id}`, {
+          method: 'DELETE'
+        });
+        setItems(items.filter(item => item.id !== id));
+      } catch (error) {
+        console.error('Error deleting item:', error);
+      }
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const response = await fetch(`${API_URL}/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setIsAdmin(true);
+        setShowPasswordPrompt(false);
+        setPassword('');
+      } else {
+        alert('Invalid password');
+        setPassword('');
+      }
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      alert('Error verifying password');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+  };
+
+  if (isLoading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  return (
+    <div className="App">
+      <header className="header">
+        <div className="header-content">
+          <div className="header-text">
+            <h1>🎁 Mirinae's Wishlist</h1>
+            {/* <p className="subtitle">Help make Mirinae's wishes come true!</p> */}
+          </div>
+          {/* Hidden admin button - click the star */}
+          <button 
+            className="admin-button"
+            onClick={() => !isAdmin ? setShowPasswordPrompt(true) : handleLogout()}
+            title={isAdmin ? "Logout" : "Admin"}
+          >
+            {isAdmin ? '🔓' : '⭐'}
+          </button>
+        </div>
+      </header>
+
+      {/* Password prompt modal */}
+      {showPasswordPrompt && (
+        <div className="modal-overlay" onClick={() => setShowPasswordPrompt(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Admin Login</h2>
+            <form onSubmit={handleLogin}>
+              <input
+                type="password"
+                placeholder="Enter password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-field"
+                autoFocus
+              />
+              <div className="modal-buttons">
+                <button type="submit" className="btn btn-primary">Login</button>
+                <button 
+                  type="button" 
+                  className="btn btn-cancel"
+                  onClick={() => {
+                    setShowPasswordPrompt(false);
+                    setPassword('');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="container">
+        {isAdmin && (
+          <div className="add-item-form">
+          <h2>Add New Item</h2>
+          <form onSubmit={handleAddItem}>
+            <input
+              type="text"
+              placeholder="Gift name or experience"
+              value={newItem.title}
+              onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+              className="input-field"
+            />
+            <input
+              type="url"
+              placeholder="Product link (optional)"
+              value={newItem.link}
+              onChange={(e) => setNewItem({ ...newItem, link: e.target.value })}
+              className="input-field"
+            />
+            <div className="form-row">
+              <select
+                value={newItem.category}
+                onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                className="input-field category-select"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="1"
+                placeholder="Quantity"
+                value={newItem.quantity}
+                onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 1 })}
+                className="input-field quantity-input"
+              />
+            </div>
+            
+            {newItem.category === 'Cash Gift' && (
+              <div className="cash-gift-fields">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount (e.g., 25.00)"
+                  value={newItem.price}
+                  onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                  className="input-field"
+                />
+                <select
+                  value={newItem.secondaryCategory}
+                  onChange={(e) => setNewItem({ ...newItem, secondaryCategory: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">Select category for this gift (optional)</option>
+                  {secondaryCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            <button type="submit" className="btn btn-primary">Add to Wishlist</button>
+          </form>
+        </div>
+        )}
+
+        <div className="wishlist">
+          <div className="wishlist-header">
+            <h2>Wishlist Items ({items.filter(item => !item.purchased).length} available)</h2>
+            <div className="category-filter">
+              <label>Filter: </label>
+              <select 
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="filter-select"
+              >
+                <option value="All">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          {items.length === 0 ? (
+            <p className="empty-message">No items yet. Add some gifts above!</p>
+          ) : (
+            <div className="items-grid">
+              {items
+                .filter(item => selectedCategory === 'All' || item.category === selectedCategory)
+                .map((item) => (
+                <div 
+                  key={item.id} 
+                  className={`item-card ${item.purchased ? 'purchased' : ''}`}
+                >
+                  <div className="item-header">
+                    <div className="item-header-left">
+                      <div className="category-badges">
+                        <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
+                          {item.category || 'Other'}
+                        </span>
+                        {item.category === 'Cash Gift' && item.secondaryCategory && (
+                          <span className={`category-badge ${item.secondaryCategory.toLowerCase().replace(' ', '-')}`}>
+                            {item.secondaryCategory}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="item-title">{item.title}</h3>
+                      {item.category === 'Cash Gift' && item.price && (
+                        <div className="price-display">${parseFloat(item.price).toFixed(2)}</div>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => handleDelete(item.id)}
+                        className="btn-delete"
+                        title="Delete item"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  
+                  {item.link && (
+                    <a 
+                      href={item.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="item-link"
+                    >
+                      View Product →
+                    </a>
+                  )}
+                  
+                  <div className="item-footer">
+                    <div className="quantity-badge">
+                      {item.purchased ? (
+                        <span className="status-purchased">✓ All Purchased</span>
+                      ) : (
+                        <span className="status-available">
+                          {item.quantity} available
+                        </span>
+                      )}
+                    </div>
+                    
+                    {!item.purchased && (
+                      <button 
+                        onClick={() => handlePurchase(item.id)}
+                        className="btn btn-secondary"
+                      >
+                        I'll Buy This!
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <footer className="footer">
+        <p>Made with ❤️ for Mirinae</p>
+      </footer>
+    </div>
+  );
+}
+
+export default App;
