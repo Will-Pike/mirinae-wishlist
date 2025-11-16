@@ -157,18 +157,49 @@ function App() {
 
   const handleDragStart = (e, item) => {
     setDraggedItem(item);
-    e.dataTransfer.effectAllowed = 'move';
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+    }
   };
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
   };
 
   const handleDrop = (e, targetItem) => {
     e.preventDefault();
     
     if (!draggedItem || draggedItem.id === targetItem.id) {
+      setDraggedItem(null);
+      return;
+    }
+
+    const draggedIndex = items.findIndex(item => item.id === draggedItem.id);
+    const targetIndex = items.findIndex(item => item.id === targetItem.id);
+
+    const newItems = [...items];
+    newItems.splice(draggedIndex, 1);
+    newItems.splice(targetIndex, 0, draggedItem);
+
+    setItems(newItems);
+    setDraggedItem(null);
+  };
+
+  const handleTouchStart = (e, item) => {
+    if (!isAdmin) return;
+    setDraggedItem(item);
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+  };
+
+  const handleTouchEnd = (e, targetItem) => {
+    if (!draggedItem || !targetItem || draggedItem.id === targetItem.id) {
+      setDraggedItem(null);
       return;
     }
 
@@ -556,11 +587,14 @@ function App() {
                   return (
                   <div 
                     key={item.id} 
-                    className={`item-card ${item.purchased ? 'purchased' : ''} ${isAdmin ? 'draggable' : ''}`}
+                    className={`item-card ${item.purchased ? 'purchased' : ''} ${isAdmin ? 'draggable' : ''} ${draggedItem?.id === item.id ? 'dragging' : ''}`}
                     draggable={isAdmin}
                     onDragStart={(e) => isAdmin && handleDragStart(e, item)}
                     onDragOver={(e) => isAdmin && handleDragOver(e)}
                     onDrop={(e) => isAdmin && handleDrop(e, item)}
+                    onTouchStart={(e) => handleTouchStart(e, item)}
+                    onTouchMove={(e) => isAdmin && handleTouchMove(e)}
+                    onTouchEnd={(e) => isAdmin && handleTouchEnd(e, item)}
                   >
                     <div className="item-header">
                       <div className="item-header-left">

@@ -10,7 +10,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, #CCCCFF 0%, #e6ccff 100%);
   min-height: 100vh;
 }
 
@@ -242,10 +242,18 @@ body {
 
 .item-card.draggable {
   cursor: move;
+  touch-action: none;
+  user-select: none;
 }
 
 .item-card.draggable:active {
   opacity: 0.7;
+}
+
+.item-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  border: 2px dashed #667eea;
 }
 
 .item-header {
