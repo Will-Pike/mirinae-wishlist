@@ -21,8 +21,24 @@ function App() {
     ? '/api' 
     : `http://${window.location.hostname}:3001/api`;
 
-  const categories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Cash Gift', 'Other'];
-  const secondaryCategories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Other'];
+  const categories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Memberships', 'Cash Gift', 'Other'];
+  const secondaryCategories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Memberships', 'Other'];
+
+  const getCategoryLinkText = (category) => {
+    const linkText = {
+      'Books': 'Buy Book',
+      'Toys': 'Buy Toy',
+      'Gift Cards': 'Buy Gift Card',
+      'Clothes': 'Buy Item',
+      'Subscriptions': 'Buy Subscription',
+      'Classes': 'Buy Class',
+      'Tickets': 'Buy Ticket',
+      'Memberships': 'Buy Membership',
+      'Cash Gift': 'More info',
+      'Other': 'View Product'
+    };
+    return linkText[category] || 'View Product';
+  };
 
   useEffect(() => {
     fetchItems();
@@ -640,20 +656,22 @@ function App() {
                         rel="noopener noreferrer"
                         className="item-link"
                       >
-                        View Product →
+                        {getCategoryLinkText(item.category)} →
                       </a>
                     )}
                     
                     <div className="item-footer">
-                      <div className="quantity-badge">
-                        {item.purchased ? (
-                          <span className="status-purchased">✓ All Purchased</span>
-                        ) : (
-                          <span className="status-available">
-                            {purchasedCount} of {totalQuantity} purchased
-                          </span>
-                        )}
-                      </div>
+                      {totalQuantity > 1 && (
+                        <div className="quantity-badge">
+                          {item.purchased ? (
+                            <span className="status-purchased">✓ All Purchased</span>
+                          ) : (
+                            <span className="status-available">
+                              {purchasedCount} of {totalQuantity} purchased
+                            </span>
+                          )}
+                        </div>
+                      )}
                       
                       {!item.purchased && !isAdmin && (
                         <button 
@@ -664,7 +682,7 @@ function App() {
                         </button>
                       )}
                       
-                      {item.purchased && isAdmin && (
+                      {Boolean(item.purchased) && isAdmin && (
                         <button 
                           onClick={() => handleRestore(item.id)}
                           className="btn btn-restore"

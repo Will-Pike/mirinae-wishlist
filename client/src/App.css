@@ -10,7 +10,8 @@ body {
   font-family: 'Lato', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+  background: linear-gradient(90deg, #CCCCFF 0%, #e6ccff 100%);
   min-height: 100vh;
 }
 
@@ -321,6 +322,11 @@ body {
 .category-badge.tickets {
   background: #ede7f6;
   color: #5e35b1;
+}
+
+.category-badge.memberships {
+  background: #e0f2f1;
+  color: #00695c;
 }
 
 .category-badge.cash-gift {
