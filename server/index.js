@@ -19,6 +19,18 @@ const db = low(adapter);
 // Initialize database with default values
 db.defaults({ items: [], nextId: 1, adminPassword: 'mirinae2025' }).write();
 
+// Migration: Add order field to existing items that don't have it
+const itemsWithoutOrder = db.get('items').filter(item => item.order === undefined).value();
+if (itemsWithoutOrder.length > 0) {
+  itemsWithoutOrder.forEach((item, index) => {
+    db.get('items')
+      .find({ id: item.id })
+      .assign({ order: index })
+      .write();
+  });
+  console.log(`Migrated ${itemsWithoutOrder.length} items to include order field`);
+}
+
 // API Routes
 
 // Verify admin password
@@ -41,7 +53,7 @@ app.post('/api/auth/verify', (req, res) => {
 app.get('/api/items', (req, res) => {
   try {
     const items = db.get('items')
-      .orderBy(['purchased', 'created_at'], ['asc', 'desc'])
+      .orderBy(['purchased', 'order', 'created_at'], ['asc', 'asc', 'desc'])
       .value();
     res.json(items);
   } catch (error) {
@@ -59,6 +71,8 @@ app.post('/api/items', (req, res) => {
     }
 
     const id = db.get('nextId').value();
+    // Set order to be the highest current order + 1, or 0 if no items exist
+    const maxOrder = db.get('items').map('order').max().value() || -1;
     const newItem = {
       id,
       title,
@@ -68,6 +82,7 @@ app.post('/api/items', (req, res) => {
       price: price || null,
       secondaryCategory: secondaryCategory || null,
       purchased: 0,
+      order: maxOrder + 1,
       created_at: new Date().toISOString()
     };
 
@@ -158,6 +173,39 @@ app.post('/api/items/:id/purchase', (req, res) => {
     
     res.json(updatedItem);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reorder items (MUST come before /api/items/:id route)
+app.put('/api/items/reorder', (req, res) => {
+  try {
+    const { itemIds } = req.body;
+    console.log('🔄 Reorder request received with itemIds:', itemIds);
+    
+    if (!Array.isArray(itemIds)) {
+      console.error('❌ itemIds is not an array:', itemIds);
+      return res.status(400).json({ error: 'itemIds must be an array' });
+    }
+
+    // Update each item's order based on its position in the array
+    itemIds.forEach((id, index) => {
+      console.log(`Setting item ${id} to order ${index}`);
+      db.get('items')
+        .find({ id: parseInt(id) })
+        .assign({ order: index })
+        .write();
+    });
+    
+    // Return the updated items in their new order
+    const updatedItems = db.get('items')
+      .orderBy(['purchased', 'order', 'created_at'], ['asc', 'asc', 'desc'])
+      .value();
+    
+    console.log('✅ Reorder complete, returning', updatedItems.length, 'items');
+    res.json(updatedItems);
+  } catch (error) {
+    console.error('❌ Error in reorder endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });

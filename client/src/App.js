@@ -185,7 +185,7 @@ function App() {
     }
   };
 
-  const handleDrop = (e, targetItem) => {
+  const handleDrop = async (e, targetItem) => {
     e.preventDefault();
     
     if (!draggedItem || draggedItem.id === targetItem.id) {
@@ -193,15 +193,58 @@ function App() {
       return;
     }
 
-    const draggedIndex = items.findIndex(item => item.id === draggedItem.id);
-    const targetIndex = items.findIndex(item => item.id === targetItem.id);
+    // Get the currently visible/filtered items for reordering
+    const visibleItems = items.filter(item => selectedCategory === 'All' || item.category === selectedCategory);
+    const draggedIndex = visibleItems.findIndex(item => item.id === draggedItem.id);
+    const targetIndex = visibleItems.findIndex(item => item.id === targetItem.id);
 
+    // Reorder only the visible items
+    const newVisibleItems = [...visibleItems];
+    newVisibleItems.splice(draggedIndex, 1);
+    newVisibleItems.splice(targetIndex, 0, draggedItem);
+
+    // Update the full items array, preserving non-visible items in their original positions
     const newItems = [...items];
-    newItems.splice(draggedIndex, 1);
-    newItems.splice(targetIndex, 0, draggedItem);
+    const visibleItemsMap = new Map(newVisibleItems.map((item, index) => [item.id, index]));
+    
+    // Sort all items: visible items get new order, others keep relative positions
+    newItems.sort((a, b) => {
+      const aIsVisible = visibleItemsMap.has(a.id);
+      const bIsVisible = visibleItemsMap.has(b.id);
+      
+      if (aIsVisible && bIsVisible) {
+        return visibleItemsMap.get(a.id) - visibleItemsMap.get(b.id);
+      }
+      if (aIsVisible && !bIsVisible) return -1;
+      if (!aIsVisible && bIsVisible) return 1;
+      return a.order - b.order; // Keep original order for non-visible items
+    });
 
+    // Update local state immediately for responsive UI
     setItems(newItems);
     setDraggedItem(null);
+
+    // Send the new order to the backend to persist it
+    try {
+      const itemIds = newItems.map(item => item.id);
+      console.log('🔄 Sending reorder request:', itemIds);
+      const response = await fetch(`${API_URL}/items/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds })
+      });
+      
+      if (!response.ok) {
+        console.error('❌ Failed to save new order, response status:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      } else {
+        const result = await response.json();
+        console.log('✅ Order saved successfully:', result.length, 'items');
+      }
+    } catch (error) {
+      console.error('❌ Error saving new order:', error);
+    }
   };
 
   const handleTouchStart = (e, item) => {
@@ -213,21 +256,64 @@ function App() {
     e.preventDefault();
   };
 
-  const handleTouchEnd = (e, targetItem) => {
+  const handleTouchEnd = async (e, targetItem) => {
     if (!draggedItem || !targetItem || draggedItem.id === targetItem.id) {
       setDraggedItem(null);
       return;
     }
 
-    const draggedIndex = items.findIndex(item => item.id === draggedItem.id);
-    const targetIndex = items.findIndex(item => item.id === targetItem.id);
+    // Get the currently visible/filtered items for reordering
+    const visibleItems = items.filter(item => selectedCategory === 'All' || item.category === selectedCategory);
+    const draggedIndex = visibleItems.findIndex(item => item.id === draggedItem.id);
+    const targetIndex = visibleItems.findIndex(item => item.id === targetItem.id);
 
+    // Reorder only the visible items
+    const newVisibleItems = [...visibleItems];
+    newVisibleItems.splice(draggedIndex, 1);
+    newVisibleItems.splice(targetIndex, 0, draggedItem);
+
+    // Update the full items array, preserving non-visible items in their original positions
     const newItems = [...items];
-    newItems.splice(draggedIndex, 1);
-    newItems.splice(targetIndex, 0, draggedItem);
+    const visibleItemsMap = new Map(newVisibleItems.map((item, index) => [item.id, index]));
+    
+    // Sort all items: visible items get new order, others keep relative positions
+    newItems.sort((a, b) => {
+      const aIsVisible = visibleItemsMap.has(a.id);
+      const bIsVisible = visibleItemsMap.has(b.id);
+      
+      if (aIsVisible && bIsVisible) {
+        return visibleItemsMap.get(a.id) - visibleItemsMap.get(b.id);
+      }
+      if (aIsVisible && !bIsVisible) return -1;
+      if (!aIsVisible && bIsVisible) return 1;
+      return a.order - b.order; // Keep original order for non-visible items
+    });
 
+    // Update local state immediately for responsive UI
     setItems(newItems);
     setDraggedItem(null);
+
+    // Send the new order to the backend to persist it
+    try {
+      const itemIds = newItems.map(item => item.id);
+      console.log('🔄 Sending touch reorder request:', itemIds);
+      const response = await fetch(`${API_URL}/items/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds })
+      });
+      
+      if (!response.ok) {
+        console.error('❌ Failed to save new order (touch), response status:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      } else {
+        const result = await response.json();
+        console.log('✅ Touch order saved successfully:', result.length, 'items');
+      }
+    } catch (error) {
+      console.error('❌ Error saving new order (touch):', error);
+    }
   };
 
   const handleDelete = async (id) => {
