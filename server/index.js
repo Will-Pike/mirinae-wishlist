@@ -5,6 +5,7 @@ const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
 const https = require('https');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -296,6 +297,31 @@ app.delete('/api/items/:id', (req, res) => {
   }
 });
 
+// Helper to resolve a URL, following redirects, and return the final URL
+function resolveRedirects(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirects > 10) return reject(new Error('Too many redirects'));
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; mirinae-wishlist/1.0)' },
+      timeout: 10000,
+    }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        // Handle relative redirects
+        const next = res.headers.location.startsWith('http')
+          ? res.headers.location
+          : new URL(res.headers.location, url).href;
+        res.resume(); // discard body
+        return resolve(resolveRedirects(next, redirects + 1));
+      }
+      res.resume(); // discard body
+      resolve(url);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); resolve(url); }); // on timeout, just use what we have
+  });
+}
+
 // Helper to call the Microlink API to extract metadata (handles anti-bot for Amazon etc.)
 function fetchMicrolink(url) {
   return new Promise((resolve, reject) => {
@@ -326,9 +352,13 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
 
-    const result = await fetchMicrolink(item.link);
+    // Resolve any short URLs (a.co, amzn.to, etc.) to their final destination first
+    const resolvedUrl = await resolveRedirects(item.link);
+    console.log('Resolved URL:', item.link, '->', resolvedUrl);
 
-    console.log('Microlink result for', item.link, ':', JSON.stringify(result).substring(0, 500));
+    const result = await fetchMicrolink(resolvedUrl);
+
+    console.log('Microlink result for', resolvedUrl, ':', JSON.stringify(result).substring(0, 500));
 
     const imageUrl =
       result?.data?.image?.url ||
