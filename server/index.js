@@ -5,8 +5,6 @@ const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
 const https = require('https');
-const http = require('http');
-const { parse } = require('node-html-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -298,29 +296,24 @@ app.delete('/api/items/:id', (req, res) => {
   }
 });
 
-// Helper to fetch a URL using built-in http/https (follows redirects, Node 18 compatible)
-function fetchUrl(url, redirects = 0) {
+// Helper to call the Microlink API to extract metadata (handles anti-bot for Amazon etc.)
+function fetchMicrolink(url) {
   return new Promise((resolve, reject) => {
-    if (redirects > 5) return reject(new Error('Too many redirects'));
-    const client = url.startsWith('https') ? https : http;
-    const req = client.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-      timeout: 15000,
+    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&meta=false`;
+    const req = https.get(apiUrl, {
+      headers: { 'User-Agent': 'mirinae-wishlist/1.0' },
+      timeout: 20000,
     }, (res) => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-        return resolve(fetchUrl(res.headers.location, redirects + 1));
-      }
       let data = '';
       res.setEncoding('utf8');
       res.on('data', chunk => { data += chunk; });
-      res.on('end', () => resolve(data));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('Invalid JSON from Microlink')); }
+      });
     });
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Microlink request timed out')); });
   });
 }
 
@@ -333,22 +326,15 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
 
-    const html = await fetchUrl(item.link);
-    const root = parse(html);
-
-    const getMeta = (attr, value) => {
-      const el = root.querySelector(`meta[${attr}="${value}"]`);
-      return el ? el.getAttribute('content') : null;
-    };
+    const result = await fetchMicrolink(item.link);
 
     const imageUrl =
-      getMeta('property', 'og:image') ||
-      getMeta('property', 'og:image:url') ||
-      getMeta('name', 'twitter:image') ||
-      getMeta('name', 'twitter:image:src');
+      result?.data?.image?.url ||
+      result?.data?.logo?.url ||
+      null;
 
     if (!imageUrl) {
-      return res.status(404).json({ error: 'No image found on this page' });
+      return res.status(404).json({ error: 'No image found for this link. Try setting one manually.' });
     }
 
     db.get('items').find({ id: parseInt(id) }).assign({ image_url: imageUrl }).write();
