@@ -328,13 +328,15 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
 
     const result = await fetchMicrolink(item.link);
 
+    console.log('Microlink result for', item.link, ':', JSON.stringify(result).substring(0, 500));
+
     const imageUrl =
       result?.data?.image?.url ||
       result?.data?.logo?.url ||
       null;
 
     if (!imageUrl) {
-      return res.status(404).json({ error: 'No image found for this link. Try setting one manually.' });
+      return res.status(404).json({ error: `No image found. Microlink status: ${result?.status}. Data: ${JSON.stringify(result?.data)}` });
     }
 
     db.get('items').find({ id: parseInt(id) }).assign({ image_url: imageUrl }).write();
