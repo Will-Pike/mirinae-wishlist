@@ -4,7 +4,8 @@ const bodyParser = require('body-parser');
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
-const axios = require('axios');
+const https = require('https');
+const http = require('http');
 const cheerio = require('cheerio');
 
 const app = express();
@@ -297,6 +298,32 @@ app.delete('/api/items/:id', (req, res) => {
   }
 });
 
+// Helper to fetch a URL using built-in http/https (follows redirects, Node 18 compatible)
+function fetchUrl(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirects > 5) return reject(new Error('Too many redirects'));
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+      timeout: 15000,
+    }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        return resolve(fetchUrl(res.headers.location, redirects + 1));
+      }
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+  });
+}
+
 // Scrape image for an item from its link URL
 app.post('/api/items/:id/fetch-image', async (req, res) => {
   try {
@@ -306,17 +333,8 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
 
-    const response = await axios.get(item.link, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-      timeout: 15000,
-      maxRedirects: 5,
-    });
-
-    const $ = cheerio.load(response.data);
+    const html = await fetchUrl(item.link);
+    const $ = cheerio.load(html);
 
     const imageUrl =
       $('meta[property="og:image"]').attr('content') ||
