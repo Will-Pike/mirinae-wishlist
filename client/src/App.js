@@ -16,6 +16,7 @@ function App() {
   const [editingItem, setEditingItem] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
+  const [fetchingImageFor, setFetchingImageFor] = useState(null);
 
   const API_URL = process.env.NODE_ENV === 'production' 
     ? '/api' 
@@ -326,6 +327,38 @@ function App() {
       } catch (error) {
         console.error('Error deleting item:', error);
       }
+    }
+  };
+
+  const handleFetchImage = async (item) => {
+    setFetchingImageFor(item.id);
+    try {
+      const response = await fetch(`${API_URL}/items/${item.id}/fetch-image`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Could not find an image for this item.');
+      } else {
+        setItems(items.map(i => i.id === item.id ? data : i));
+      }
+    } catch (error) {
+      console.error('Error fetching image:', error);
+      alert('Error fetching image. Please try again.');
+    } finally {
+      setFetchingImageFor(null);
+    }
+  };
+
+  const handleClearImage = async (item) => {
+    try {
+      const response = await fetch(`${API_URL}/items/${item.id}/image`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: null })
+      });
+      const data = await response.json();
+      setItems(items.map(i => i.id === item.id ? data : i));
+    } catch (error) {
+      console.error('Error clearing image:', error);
     }
   };
 
@@ -698,6 +731,23 @@ function App() {
                     onTouchMove={(e) => isAdmin && handleTouchMove(e)}
                     onTouchEnd={(e) => isAdmin && handleTouchEnd(e, item)}
                   >
+                    {item.image_url && (
+                      <div className="item-image-wrapper">
+                        <img
+                          src={item.image_url}
+                          alt={item.title}
+                          className="item-image"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        {isAdmin && (
+                          <button
+                            className="btn-clear-image"
+                            onClick={() => handleClearImage(item)}
+                            title="Remove image"
+                          >✕</button>
+                        )}
+                      </div>
+                    )}
                     <div className="item-header">
                       <div className="item-header-left">
                         <div className="category-badges">
@@ -717,6 +767,16 @@ function App() {
                       </div>
                       {isAdmin && (
                         <div className="admin-controls">
+                          {item.link && (
+                            <button
+                              onClick={() => handleFetchImage(item)}
+                              className="btn-fetch-image"
+                              title={item.image_url ? 'Re-fetch image' : 'Fetch image'}
+                              disabled={fetchingImageFor === item.id}
+                            >
+                              {fetchingImageFor === item.id ? '⏳' : '🖼'}
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleEditClick(item)}
                             className="btn-edit"

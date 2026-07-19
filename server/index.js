@@ -4,6 +4,8 @@ const bodyParser = require('body-parser');
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -290,6 +292,62 @@ app.delete('/api/items/:id', (req, res) => {
       .remove({ id: parseInt(id) })
       .write();
     res.json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Scrape image for an item from its link URL
+app.post('/api/items/:id/fetch-image', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = db.get('items').find({ id: parseInt(id) }).value();
+
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
+
+    const response = await axios.get(item.link, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+      timeout: 15000,
+      maxRedirects: 5,
+    });
+
+    const $ = cheerio.load(response.data);
+
+    const imageUrl =
+      $('meta[property="og:image"]').attr('content') ||
+      $('meta[property="og:image:url"]').attr('content') ||
+      $('meta[name="twitter:image"]').attr('content') ||
+      $('meta[name="twitter:image:src"]').attr('content');
+
+    if (!imageUrl) {
+      return res.status(404).json({ error: 'No image found on this page' });
+    }
+
+    db.get('items').find({ id: parseInt(id) }).assign({ image_url: imageUrl }).write();
+    const updatedItem = db.get('items').find({ id: parseInt(id) }).value();
+    res.json(updatedItem);
+  } catch (error) {
+    res.status(500).json({ error: `Failed to fetch image: ${error.message}` });
+  }
+});
+
+// Manually set or clear the image URL for an item
+app.patch('/api/items/:id/image', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url } = req.body;
+
+    const item = db.get('items').find({ id: parseInt(id) }).value();
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    db.get('items').find({ id: parseInt(id) }).assign({ image_url: image_url || null }).write();
+    const updatedItem = db.get('items').find({ id: parseInt(id) }).value();
+    res.json(updatedItem);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
