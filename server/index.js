@@ -6,7 +6,7 @@ const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
 const https = require('https');
 const http = require('http');
-const cheerio = require('cheerio');
+const { parse } = require('node-html-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -334,13 +334,18 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
 
     const html = await fetchUrl(item.link);
-    const $ = cheerio.load(html);
+    const root = parse(html);
+
+    const getMeta = (attr, value) => {
+      const el = root.querySelector(`meta[${attr}="${value}"]`);
+      return el ? el.getAttribute('content') : null;
+    };
 
     const imageUrl =
-      $('meta[property="og:image"]').attr('content') ||
-      $('meta[property="og:image:url"]').attr('content') ||
-      $('meta[name="twitter:image"]').attr('content') ||
-      $('meta[name="twitter:image:src"]').attr('content');
+      getMeta('property', 'og:image') ||
+      getMeta('property', 'og:image:url') ||
+      getMeta('name', 'twitter:image') ||
+      getMeta('name', 'twitter:image:src');
 
     if (!imageUrl) {
       return res.status(404).json({ error: 'No image found on this page' });
