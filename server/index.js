@@ -95,6 +95,25 @@ app.post('/api/items', (req, res) => {
     db.update('nextId', n => n + 1).write();
     
     res.status(201).json(newItem);
+
+    // Auto-fetch image in the background if the item has a link
+    if (newItem.link) {
+      (async () => {
+        try {
+          const resolvedUrl = await resolveRedirects(newItem.link);
+          const cleanUrl = cleanUrlForScraping(resolvedUrl);
+          const asinImageUrl = getAmazonImageFromAsin(cleanUrl);
+          const result = await fetchMicrolink(cleanUrl);
+          const imageUrl = result?.data?.image?.url || result?.data?.logo?.url || asinImageUrl || null;
+          if (imageUrl) {
+            db.get('items').find({ id: newItem.id }).assign({ image_url: imageUrl }).write();
+            console.log(`Auto-fetched image for item ${newItem.id}: ${imageUrl}`);
+          }
+        } catch (e) {
+          console.log(`Auto image fetch failed for item ${newItem.id}:`, e.message);
+        }
+      })();
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
