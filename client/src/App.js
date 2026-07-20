@@ -76,6 +76,24 @@ function App() {
       const data = await response.json();
       setItems([data, ...items]);
       setNewItem({ title: '', link: '', quantity: 1, category: 'Books', price: '', secondaryCategory: '' });
+
+      // If the item has a link, poll for the image after the server's background fetch completes
+      if (data.link) {
+        const pollForImage = async (attempts = 0) => {
+          if (attempts >= 5) return; // give up after ~15 seconds
+          await new Promise(r => setTimeout(r, 3000));
+          try {
+            const refreshed = await fetch(`${API_URL}/items`).then(r => r.json());
+            const updated = refreshed.find(i => i.id === data.id);
+            if (updated?.image_url) {
+              setItems(prev => prev.map(i => i.id === data.id ? updated : i));
+            } else {
+              pollForImage(attempts + 1);
+            }
+          } catch (e) { /* silently ignore */ }
+        };
+        pollForImage();
+      }
     } catch (error) {
       console.error('Error adding item:', error);
     }
