@@ -100,11 +100,7 @@ app.post('/api/items', (req, res) => {
     if (newItem.link) {
       (async () => {
         try {
-          const resolvedUrl = await resolveRedirects(newItem.link);
-          const cleanUrl = cleanUrlForScraping(resolvedUrl);
-          const asinImageUrl = getAmazonImageFromAsin(cleanUrl);
-          const result = await fetchMicrolink(cleanUrl);
-          const imageUrl = result?.data?.image?.url || result?.data?.logo?.url || asinImageUrl || null;
+          const imageUrl = await findImageForUrl(newItem.link);
           if (imageUrl) {
             db.get('items').find({ id: newItem.id }).assign({ image_url: imageUrl }).write();
             console.log(`Auto-fetched image for item ${newItem.id}: ${imageUrl}`);
@@ -341,56 +337,98 @@ function resolveRedirects(url, redirects = 0) {
   });
 }
 
-// Helper to call the Microlink API to extract metadata (handles anti-bot for Amazon etc.)
-function fetchMicrolink(url) {
+// Fetch a URL and return the HTML body (follows redirects, streams response)
+function fetchHtml(url, redirects = 0) {
   return new Promise((resolve, reject) => {
-    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&meta=false`;
-    const req = https.get(apiUrl, {
-      headers: { 'User-Agent': 'mirinae-wishlist/1.0' },
-      timeout: 20000,
+    if (redirects > 8) return reject(new Error('Too many redirects'));
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'identity',
+      },
+      timeout: 15000,
     }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        const next = res.headers.location.startsWith('http')
+          ? res.headers.location
+          : new URL(res.headers.location, url).href;
+        res.resume();
+        return resolve(fetchHtml(next, redirects + 1));
+      }
       let data = '';
       res.setEncoding('utf8');
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('Invalid JSON from Microlink')); }
+      // Only read first 100KB — og:image is always in <head>
+      res.on('data', chunk => {
+        data += chunk;
+        if (data.length > 100000) { req.destroy(); resolve(data); }
       });
+      res.on('end', () => resolve(data));
     });
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Microlink request timed out')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
   });
+}
+
+// Extract og:image (or twitter:image) from raw HTML using regex
+function extractOgImage(html) {
+  const patterns = [
+    /meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    /meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    /meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    /meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1] && match[1].startsWith('http')) return match[1];
+  }
+  return null;
 }
 
 // Clean a URL for scraping - strips tracking params, normalises Amazon URLs to /dp/ASIN
 function cleanUrlForScraping(url) {
   try {
     const parsed = new URL(url);
-    // For Amazon, strip everything down to https://www.amazon.com/dp/ASIN
     if (parsed.hostname.includes('amazon.')) {
       const asinMatch = parsed.pathname.match(/\/dp\/([A-Z0-9]{10})/i);
-      if (asinMatch) {
-        return `https://www.amazon.com/dp/${asinMatch[1]}`;
-      }
+      if (asinMatch) return `https://www.amazon.com/dp/${asinMatch[1]}`;
     }
-    // For other sites, just drop query params (they're usually tracking noise)
+    // For other sites, drop query params (usually tracking noise)
     return `${parsed.origin}${parsed.pathname}`;
   } catch (e) {
     return url;
   }
 }
 
-// Try to get an Amazon product image directly from the CDN using the ASIN
+// Get an Amazon product image directly from the CDN using the ASIN (no scraping needed)
 function getAmazonImageFromAsin(url) {
   try {
     const parsed = new URL(url);
     if (parsed.hostname.includes('amazon.')) {
       const asinMatch = parsed.pathname.match(/\/dp\/([A-Z0-9]{10})/i);
-      if (asinMatch) {
-        return `https://images-na.ssl-images-amazon.com/images/P/${asinMatch[1]}.jpg`;
-      }
+      if (asinMatch) return `https://images-na.ssl-images-amazon.com/images/P/${asinMatch[1]}.jpg`;
     }
   } catch (e) {}
+  return null;
+}
+
+// Core image-finding logic, shared by the endpoint and auto-fetch
+async function findImageForUrl(link) {
+  const resolvedUrl = await resolveRedirects(link);
+  const cleanUrl = cleanUrlForScraping(resolvedUrl);
+  console.log(`Finding image: ${link} -> ${cleanUrl}`);
+
+  // Amazon: use CDN directly (instant, no scraping needed)
+  const asinImage = getAmazonImageFromAsin(cleanUrl);
+  if (asinImage) return asinImage;
+
+  // All other sites: fetch the HTML and extract og:image
+  const html = await fetchHtml(cleanUrl);
+  const ogImage = extractOgImage(html);
+  if (ogImage) return ogImage;
+
   return null;
 }
 
@@ -403,29 +441,10 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
 
-    // Resolve any short URLs (a.co, amzn.to, etc.) to their final destination first
-    const resolvedUrl = await resolveRedirects(item.link);
-    console.log('Resolved URL:', item.link, '->', resolvedUrl);
-
-    // Clean the URL (strip tracking params, normalise Amazon to /dp/ASIN)
-    const cleanUrl = cleanUrlForScraping(resolvedUrl);
-    console.log('Clean URL for Microlink:', cleanUrl);
-
-    // Try Amazon CDN image directly first (fast, reliable for Amazon)
-    const asinImageUrl = getAmazonImageFromAsin(cleanUrl);
-
-    const result = await fetchMicrolink(cleanUrl);
-    console.log('Microlink result for', cleanUrl, ':', JSON.stringify(result).substring(0, 500));
-
-    const imageUrl =
-      result?.data?.image?.url ||
-      result?.data?.logo?.url ||
-      asinImageUrl || // fall back to direct Amazon CDN URL
-      null;
-      null;
+    const imageUrl = await findImageForUrl(item.link);
 
     if (!imageUrl) {
-      return res.status(404).json({ error: `No image found. Microlink status: ${result?.status}. Data: ${JSON.stringify(result?.data)}` });
+      return res.status(404).json({ error: 'No image found for this link. Try setting one manually.' });
     }
 
     db.get('items').find({ id: parseInt(id) }).assign({ image_url: imageUrl }).write();
