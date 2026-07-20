@@ -343,6 +343,38 @@ function fetchMicrolink(url) {
   });
 }
 
+// Clean a URL for scraping - strips tracking params, normalises Amazon URLs to /dp/ASIN
+function cleanUrlForScraping(url) {
+  try {
+    const parsed = new URL(url);
+    // For Amazon, strip everything down to https://www.amazon.com/dp/ASIN
+    if (parsed.hostname.includes('amazon.')) {
+      const asinMatch = parsed.pathname.match(/\/dp\/([A-Z0-9]{10})/i);
+      if (asinMatch) {
+        return `https://www.amazon.com/dp/${asinMatch[1]}`;
+      }
+    }
+    // For other sites, just drop query params (they're usually tracking noise)
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch (e) {
+    return url;
+  }
+}
+
+// Try to get an Amazon product image directly from the CDN using the ASIN
+function getAmazonImageFromAsin(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('amazon.')) {
+      const asinMatch = parsed.pathname.match(/\/dp\/([A-Z0-9]{10})/i);
+      if (asinMatch) {
+        return `https://images-na.ssl-images-amazon.com/images/P/${asinMatch[1]}.jpg`;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 // Scrape image for an item from its link URL
 app.post('/api/items/:id/fetch-image', async (req, res) => {
   try {
@@ -356,13 +388,21 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
     const resolvedUrl = await resolveRedirects(item.link);
     console.log('Resolved URL:', item.link, '->', resolvedUrl);
 
-    const result = await fetchMicrolink(resolvedUrl);
+    // Clean the URL (strip tracking params, normalise Amazon to /dp/ASIN)
+    const cleanUrl = cleanUrlForScraping(resolvedUrl);
+    console.log('Clean URL for Microlink:', cleanUrl);
 
-    console.log('Microlink result for', resolvedUrl, ':', JSON.stringify(result).substring(0, 500));
+    // Try Amazon CDN image directly first (fast, reliable for Amazon)
+    const asinImageUrl = getAmazonImageFromAsin(cleanUrl);
+
+    const result = await fetchMicrolink(cleanUrl);
+    console.log('Microlink result for', cleanUrl, ':', JSON.stringify(result).substring(0, 500));
 
     const imageUrl =
       result?.data?.image?.url ||
       result?.data?.logo?.url ||
+      asinImageUrl || // fall back to direct Amazon CDN URL
+      null;
       null;
 
     if (!imageUrl) {
