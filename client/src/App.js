@@ -17,6 +17,7 @@ function App() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
   const [fetchingImageFor, setFetchingImageFor] = useState(null);
+  const [purchasedSectionCollapsed, setPurchasedSectionCollapsed] = useState(true);
 
   const API_URL = process.env.NODE_ENV === 'production' 
     ? '/api' 
@@ -594,8 +595,11 @@ function App() {
           <>
             {/* Purchased Items Section */}
             <div className="purchased-items-section">
-              <h2>Purchased Items & Messages</h2>
-              {items.filter(item => item.purchasers && item.purchasers.length > 0).length === 0 ? (
+              <h2 className="collapsible-heading" onClick={() => setPurchasedSectionCollapsed(c => !c)}>
+                Purchased Items & Messages
+                <span className="collapse-arrow">{purchasedSectionCollapsed ? '▶' : '▼'}</span>
+              </h2>
+              {!purchasedSectionCollapsed && (items.filter(item => item.purchasers && item.purchasers.length > 0).length === 0 ? (
                 <p className="empty-message">No purchases yet.</p>
               ) : (
                 <div className="purchased-items-grid">
@@ -637,7 +641,7 @@ function App() {
                       </div>
                     ))}
                 </div>
-              )}
+              ))}
             </div>
 
             <div className="add-item-form">

@@ -638,6 +638,28 @@ body {
   font-size: 1.5rem;
 }
 
+.collapsible-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-heading:hover {
+  color: #667eea;
+}
+
+.collapse-arrow {
+  font-size: 0.75rem;
+  color: #999;
+  transition: color 0.2s;
+}
+
+.collapsible-heading:hover .collapse-arrow {
+  color: #667eea;
+}
+
 .purchased-items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
