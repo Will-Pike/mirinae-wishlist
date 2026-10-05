@@ -8,3 +8,4 @@ wishlist.json
 .DS_Store
 *.log
 npm-debug.log*
+.aws-sam/

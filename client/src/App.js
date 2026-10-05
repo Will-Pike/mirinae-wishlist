@@ -22,6 +22,7 @@ function App() {
   const API_URL = process.env.NODE_ENV === 'production' 
     ? '/api' 
     : `http://${window.location.hostname}:3001/api`;
+  const apiFetch = (url, options = {}) => fetch(url, { ...options, credentials: 'include' });
 
   const categories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Memberships', 'Cash Gift', 'Other'];
   const secondaryCategories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Memberships', 'Other'];
@@ -49,7 +50,7 @@ function App() {
 
   const fetchItems = async () => {
     try {
-      const response = await fetch(`${API_URL}/items`);
+      const response = await apiFetch(`${API_URL}/items`);
       const data = await response.json();
       setItems(data);
       setIsLoading(false);
@@ -68,7 +69,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/items`, {
+      const response = await apiFetch(`${API_URL}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem)
@@ -84,7 +85,7 @@ function App() {
           if (attempts >= 5) return; // give up after ~15 seconds
           await new Promise(r => setTimeout(r, 3000));
           try {
-            const refreshed = await fetch(`${API_URL}/items`).then(r => r.json());
+            const refreshed = await apiFetch(`${API_URL}/items`).then(r => r.json());
             const updated = refreshed.find(i => i.id === data.id);
             if (updated?.image_url) {
               setItems(prev => prev.map(i => i.id === data.id ? updated : i));
@@ -109,7 +110,7 @@ function App() {
     if (!selectedItemToPurchase) return;
 
     try {
-      const response = await fetch(`${API_URL}/items/${selectedItemToPurchase.id}/purchase`, {
+      const response = await apiFetch(`${API_URL}/items/${selectedItemToPurchase.id}/purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,7 +152,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/items/${editingItem.id}`, {
+      const response = await apiFetch(`${API_URL}/items/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingItem)
@@ -179,7 +180,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/items/${id}/restore`, {
+      const response = await apiFetch(`${API_URL}/items/${id}/restore`, {
         method: 'POST'
       });
       
@@ -248,7 +249,7 @@ function App() {
     try {
       const itemIds = newItems.map(item => item.id);
       console.log('🔄 Sending reorder request:', itemIds);
-      const response = await fetch(`${API_URL}/items/reorder`, {
+      const response = await apiFetch(`${API_URL}/items/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemIds })
@@ -317,7 +318,7 @@ function App() {
     try {
       const itemIds = newItems.map(item => item.id);
       console.log('🔄 Sending touch reorder request:', itemIds);
-      const response = await fetch(`${API_URL}/items/reorder`, {
+      const response = await apiFetch(`${API_URL}/items/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemIds })
@@ -339,7 +340,7 @@ function App() {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       try {
-        await fetch(`${API_URL}/items/${id}`, {
+        await apiFetch(`${API_URL}/items/${id}`, {
           method: 'DELETE'
         });
         setItems(items.filter(item => item.id !== id));
@@ -352,7 +353,7 @@ function App() {
   const handleFetchImage = async (item) => {
     setFetchingImageFor(item.id);
     try {
-      const response = await fetch(`${API_URL}/items/${item.id}/fetch-image`, { method: 'POST' });
+      const response = await apiFetch(`${API_URL}/items/${item.id}/fetch-image`, { method: 'POST' });
       const data = await response.json();
       if (!response.ok) {
         alert(data.error || 'Could not find an image for this item.');
@@ -369,7 +370,7 @@ function App() {
 
   const handleClearImage = async (item) => {
     try {
-      const response = await fetch(`${API_URL}/items/${item.id}/image`, {
+      const response = await apiFetch(`${API_URL}/items/${item.id}/image`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: null })
@@ -385,7 +386,7 @@ function App() {
     e.preventDefault();
     
     try {
-      const response = await fetch(`${API_URL}/auth/verify`, {
+      const response = await apiFetch(`${API_URL}/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -407,7 +408,8 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await apiFetch(`${API_URL}/auth/logout`, { method: 'POST' });
     setIsAdmin(false);
   };
 

@@ -1,47 +1,56 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const low = require('lowdb');
-const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
+const { getState, updateState, sortedItems } = require('./storage');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
-app.use(bodyParser.json());
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000', credentials: true }));
+app.use(express.json());
 
-// Database setup with LowDB (JSON file-based database)
-const adapter = new FileSync('wishlist.json');
-const db = low(adapter);
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
 
-// Initialize database with default values
-db.defaults({ items: [], nextId: 1, adminPassword: 'mirinae2025' }).write();
+function hasAdminSession(req) {
+  const sessionCookie = (req.headers.cookie || '').split('; ')
+    .find(cookie => cookie.startsWith('admin_session='));
+  if (!sessionCookie) return false;
 
-// Migration: Add order field to existing items that don't have it
-const itemsWithoutOrder = db.get('items').filter(item => item.order === undefined).value();
-if (itemsWithoutOrder.length > 0) {
-  itemsWithoutOrder.forEach((item, index) => {
-    db.get('items')
-      .find({ id: item.id })
-      .assign({ order: index })
-      .write();
-  });
-  console.log(`Migrated ${itemsWithoutOrder.length} items to include order field`);
+  const [expiresAt, signature] = sessionCookie.slice('admin_session='.length).split('.');
+  if (!expiresAt || !signature || Number(expiresAt) <= Date.now()) return false;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) return false;
+  const expected = crypto.createHmac('sha256', password).update(expiresAt).digest('hex');
+  return safeEqual(signature, expected);
+}
+
+function requireAdmin(req, res, next) {
+  if (!hasAdminSession(req)) return res.status(401).json({ error: 'Admin authentication required' });
+  next();
 }
 
 // API Routes
 
 // Verify admin password
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/auth/verify', async (req, res) => {
   try {
     const { password } = req.body;
-    const adminPassword = db.get('adminPassword').value();
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) return res.status(503).json({ error: 'Admin password is not configured' });
     
-    if (password === adminPassword) {
+    if (safeEqual(password, adminPassword)) {
+      const expiresAt = String(Date.now() + 24 * 60 * 60 * 1000);
+      const signature = crypto.createHmac('sha256', adminPassword).update(expiresAt).digest('hex');
+      const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+      res.setHeader('Set-Cookie', `admin_session=${expiresAt}.${signature}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=86400${secure}`);
       res.json({ success: true });
     } else {
       res.status(401).json({ success: false, error: 'Invalid password' });
@@ -51,20 +60,23 @@ app.post('/api/auth/verify', (req, res) => {
   }
 });
 
+app.post('/api/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'admin_session=; HttpOnly; SameSite=Lax; Path=/api; Max-Age=0');
+  res.json({ success: true });
+});
+
 // Get all items
-app.get('/api/items', (req, res) => {
+app.get('/api/items', async (req, res) => {
   try {
-    const items = db.get('items')
-      .orderBy(['purchased', 'order', 'created_at'], ['asc', 'asc', 'desc'])
-      .value();
-    res.json(items);
+    const state = await getState();
+    res.json(sortedItems(state.items));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // Add new item
-app.post('/api/items', (req, res) => {
+app.post('/api/items', requireAdmin, async (req, res) => {
   try {
     const { title, link, quantity, category, price, secondaryCategory } = req.body;
     
@@ -72,51 +84,58 @@ app.post('/api/items', (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    const id = db.get('nextId').value();
-    // Set order to be the highest current order + 1, or 0 if no items exist
-    const maxOrder = db.get('items').map('order').max().value() || -1;
-    const newItem = {
-      id,
-      title,
-      link: link || null,
-      quantity: quantity || 1,
-      category: category || 'Other',
-      price: price || null,
-      secondaryCategory: secondaryCategory || null,
-      purchased: 0,
-      order: maxOrder + 1,
-      created_at: new Date().toISOString()
-    };
-
-    db.get('items')
-      .push(newItem)
-      .write();
-
-    db.update('nextId', n => n + 1).write();
+    let newItem;
+    await updateState(state => {
+      const id = state.nextId || 1;
+      const maxOrder = state.items.reduce((maximum, item) => Math.max(maximum, item.order ?? -1), -1);
+      const item = {
+        id,
+        title,
+        link: link || null,
+        quantity: quantity || 1,
+        category: category || 'Other',
+        price: price || null,
+        secondaryCategory: secondaryCategory || null,
+        purchased: 0,
+        order: maxOrder + 1,
+        created_at: new Date().toISOString()
+      };
+      state.items.push(item);
+      state.nextId = id + 1;
+      newItem = item;
+    });
     
-    res.status(201).json(newItem);
-
-    // Auto-fetch image in the background if the item has a link
     if (newItem.link) {
-      (async () => {
-        try {
-          const imageUrl = await findImageForUrl(newItem.link);
-          if (imageUrl) {
-            db.get('items').find({ id: newItem.id }).assign({ image_url: imageUrl }).write();
-            console.log(`Auto-fetched image for item ${newItem.id}: ${imageUrl}`);
-          }
-        } catch (e) {
-          console.log(`Auto image fetch failed for item ${newItem.id}:`, e.message);
+      let timeout;
+      try {
+        const imageUrl = await Promise.race([
+          findImageForUrl(newItem.link),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Image lookup timed out')), 8000);
+          })
+        ]);
+        if (imageUrl) {
+          await updateState(state => {
+            const item = state.items.find(entry => entry.id === newItem.id);
+            if (item) item.image_url = imageUrl;
+          });
+          newItem.image_url = imageUrl;
         }
-      })();
+      } catch (error) {
+        console.log(`Auto image fetch failed for item ${newItem.id}:`, error.message);
+      } finally {
+        clearTimeout(timeout);
+      }
     }
+
+    res.status(201).json(newItem);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // Update item quantity
-app.patch('/api/items/:id/quantity', (req, res) => {
+app.patch('/api/items/:id/quantity', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { quantity } = req.body;
@@ -125,14 +144,12 @@ app.patch('/api/items/:id/quantity', (req, res) => {
       return res.status(400).json({ error: 'Quantity cannot be negative' });
     }
 
-    db.get('items')
-      .find({ id: parseInt(id) })
-      .assign({ quantity })
-      .write();
-    
-    const updatedItem = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
+    let updatedItem;
+    await updateState(state => {
+      updatedItem = state.items.find(item => item.id === parseInt(id, 10));
+      if (updatedItem) updatedItem.quantity = quantity;
+    });
+    if (!updatedItem) return res.status(404).json({ error: 'Item not found' });
     
     res.json(updatedItem);
   } catch (error) {
@@ -141,52 +158,25 @@ app.patch('/api/items/:id/quantity', (req, res) => {
 });
 
 // Mark item as purchased (decrease quantity by 1)
-app.post('/api/items/:id/purchase', (req, res) => {
+app.post('/api/items/:id/purchase', async (req, res) => {
   try {
     const { id } = req.params;
     const { purchaserName, purchaserMessage } = req.body;
     
-    const item = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
-
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    let newQuantity = item.quantity - 1;
-    let purchased = item.purchased;
-
-    // Initialize purchasers array if it doesn't exist
-    if (!item.purchasers) {
-      item.purchasers = [];
-    }
-
-    // Add purchaser info
-    const purchaserInfo = {
-      name: purchaserName || 'Anonymous',
-      message: purchaserMessage || '',
-      purchasedAt: new Date().toISOString()
-    };
-
-    // If quantity reaches 0, mark as fully purchased
-    if (newQuantity <= 0) {
-      newQuantity = 0;
-      purchased = 1;
-    }
-
-    db.get('items')
-      .find({ id: parseInt(id) })
-      .assign({ 
-        quantity: newQuantity, 
-        purchased,
-        purchasers: [...item.purchasers, purchaserInfo]
-      })
-      .write();
-    
-    const updatedItem = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
+    let updatedItem;
+    await updateState(state => {
+      updatedItem = state.items.find(item => item.id === parseInt(id, 10));
+      if (!updatedItem) return;
+      const purchasers = updatedItem.purchasers || [];
+      updatedItem.quantity = Math.max(0, (updatedItem.quantity || 0) - 1);
+      updatedItem.purchased = updatedItem.quantity === 0 ? 1 : updatedItem.purchased;
+      updatedItem.purchasers = [...purchasers, {
+        name: purchaserName || 'Anonymous',
+        message: purchaserMessage || '',
+        purchasedAt: new Date().toISOString()
+      }];
+    });
+    if (!updatedItem) return res.status(404).json({ error: 'Item not found' });
     
     res.json(updatedItem);
   } catch (error) {
@@ -195,69 +185,48 @@ app.post('/api/items/:id/purchase', (req, res) => {
 });
 
 // Reorder items (MUST come before /api/items/:id route)
-app.put('/api/items/reorder', (req, res) => {
+app.put('/api/items/reorder', requireAdmin, async (req, res) => {
   try {
     const { itemIds } = req.body;
-    console.log('🔄 Reorder request received with itemIds:', itemIds);
-    
     if (!Array.isArray(itemIds)) {
-      console.error('❌ itemIds is not an array:', itemIds);
       return res.status(400).json({ error: 'itemIds must be an array' });
     }
-
-    // Update each item's order based on its position in the array
-    itemIds.forEach((id, index) => {
-      console.log(`Setting item ${id} to order ${index}`);
-      db.get('items')
-        .find({ id: parseInt(id) })
-        .assign({ order: index })
-        .write();
+    await updateState(state => {
+      itemIds.forEach((id, index) => {
+        const item = state.items.find(entry => entry.id === parseInt(id, 10));
+        if (item) item.order = index;
+      });
     });
-    
-    // Return the updated items in their new order
-    const updatedItems = db.get('items')
-      .orderBy(['purchased', 'order', 'created_at'], ['asc', 'asc', 'desc'])
-      .value();
-    
-    console.log('✅ Reorder complete, returning', updatedItems.length, 'items');
-    res.json(updatedItems);
+    const state = await getState();
+    res.json(sortedItems(state.items));
   } catch (error) {
-    console.error('❌ Error in reorder endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Update/Edit item
-app.put('/api/items/:id', (req, res) => {
+app.put('/api/items/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, link, quantity, category, price, secondaryCategory } = req.body;
     
-    const item = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
+    let updatedItem;
+    await updateState(state => {
+      const item = state.items.find(entry => entry.id === parseInt(id, 10));
+      if (!item) return;
+      const updates = {
+        title: title !== undefined ? title : item.title,
+        link: link !== undefined ? link : item.link,
+        quantity: quantity !== undefined ? quantity : item.quantity,
+        category: category !== undefined ? category : item.category,
+        price: price !== undefined ? price : item.price,
+        secondaryCategory: secondaryCategory !== undefined ? secondaryCategory : item.secondaryCategory
+      };
+      Object.assign(item, updates);
+      updatedItem = item;
+    });
 
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    const updates = {
-      title: title !== undefined ? title : item.title,
-      link: link !== undefined ? link : item.link,
-      quantity: quantity !== undefined ? quantity : item.quantity,
-      category: category !== undefined ? category : item.category,
-      price: price !== undefined ? price : item.price,
-      secondaryCategory: secondaryCategory !== undefined ? secondaryCategory : item.secondaryCategory
-    };
-
-    db.get('items')
-      .find({ id: parseInt(id) })
-      .assign(updates)
-      .write();
-    
-    const updatedItem = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
+    if (!updatedItem) return res.status(404).json({ error: 'Item not found' });
     
     res.json(updatedItem);
   } catch (error) {
@@ -266,32 +235,18 @@ app.put('/api/items/:id', (req, res) => {
 });
 
 // Restore purchased item
-app.post('/api/items/:id/restore', (req, res) => {
+app.post('/api/items/:id/restore', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const item = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
-
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    // Get the original quantity from purchasers length + current quantity
-    const originalQuantity = (item.purchasers?.length || 0) + item.quantity;
-
-    db.get('items')
-      .find({ id: parseInt(id) })
-      .assign({ 
-        purchased: 0,
-        quantity: originalQuantity,
-        purchasers: []
-      })
-      .write();
-    
-    const updatedItem = db.get('items')
-      .find({ id: parseInt(id) })
-      .value();
+    let updatedItem;
+    await updateState(state => {
+      updatedItem = state.items.find(item => item.id === parseInt(id, 10));
+      if (!updatedItem) return;
+      updatedItem.quantity = (updatedItem.purchasers?.length || 0) + updatedItem.quantity;
+      updatedItem.purchased = 0;
+      updatedItem.purchasers = [];
+    });
+    if (!updatedItem) return res.status(404).json({ error: 'Item not found' });
     
     res.json(updatedItem);
   } catch (error) {
@@ -300,12 +255,12 @@ app.post('/api/items/:id/restore', (req, res) => {
 });
 
 // Delete item
-app.delete('/api/items/:id', (req, res) => {
+app.delete('/api/items/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    db.get('items')
-      .remove({ id: parseInt(id) })
-      .write();
+    await updateState(state => {
+      state.items = state.items.filter(item => item.id !== parseInt(id, 10));
+    });
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -433,10 +388,11 @@ async function findImageForUrl(link) {
 }
 
 // Scrape image for an item from its link URL
-app.post('/api/items/:id/fetch-image', async (req, res) => {
+app.post('/api/items/:id/fetch-image', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const item = db.get('items').find({ id: parseInt(id) }).value();
+    const state = await getState();
+    const item = state.items.find(entry => entry.id === parseInt(id, 10));
 
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (!item.link) return res.status(400).json({ error: 'Item has no link to scrape' });
@@ -447,8 +403,11 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
       return res.status(404).json({ error: 'No image found for this link. Try setting one manually.' });
     }
 
-    db.get('items').find({ id: parseInt(id) }).assign({ image_url: imageUrl }).write();
-    const updatedItem = db.get('items').find({ id: parseInt(id) }).value();
+    let updatedItem;
+    await updateState(current => {
+      updatedItem = current.items.find(entry => entry.id === parseInt(id, 10));
+      if (updatedItem) updatedItem.image_url = imageUrl;
+    });
     res.json(updatedItem);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch image: ${error.message}` });
@@ -456,24 +415,23 @@ app.post('/api/items/:id/fetch-image', async (req, res) => {
 });
 
 // Manually set or clear the image URL for an item
-app.patch('/api/items/:id/image', (req, res) => {
+app.patch('/api/items/:id/image', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { image_url } = req.body;
-
-    const item = db.get('items').find({ id: parseInt(id) }).value();
-    if (!item) return res.status(404).json({ error: 'Item not found' });
-
-    db.get('items').find({ id: parseInt(id) }).assign({ image_url: image_url || null }).write();
-    const updatedItem = db.get('items').find({ id: parseInt(id) }).value();
+    let updatedItem;
+    await updateState(state => {
+      updatedItem = state.items.find(item => item.id === parseInt(id, 10));
+      if (updatedItem) updatedItem.image_url = image_url || null;
+    });
+    if (!updatedItem) return res.status(404).json({ error: 'Item not found' });
     res.json(updatedItem);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Serve static files from React app in production
-if (process.env.NODE_ENV === 'production') {
+if (require.main === module && process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
   
   app.get('*', (req, res) => {
@@ -481,6 +439,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+module.exports = app;
