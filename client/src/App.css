@@ -290,6 +290,31 @@ body {
   border-color: var(--accent);
 }
 
+.eye-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.eye-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.eye-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .empty-message {
   text-align: center;
   color: #999;

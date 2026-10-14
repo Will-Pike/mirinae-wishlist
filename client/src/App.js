@@ -22,6 +22,9 @@ const STRINGS = {
     adminLogin: 'Admin Login',
     enterPassword: 'Enter password',
     login: 'Login',
+    showPurchased: 'Show purchased items',
+    hidePurchased: 'Hide purchased items',
+    allHidden: 'All items have been purchased. Use the eye icon to show them.',
     categories: {},
     linkText: {}
   },
@@ -45,6 +48,9 @@ const STRINGS = {
     adminLogin: '관리자 로그인',
     enterPassword: '비밀번호 입력',
     login: '로그인',
+    showPurchased: '구매한 선물 보기',
+    hidePurchased: '구매한 선물 숨기기',
+    allHidden: '모든 선물이 구매되었어요. 눈 아이콘을 눌러 보세요.',
     categories: {
       'Books': '책', 'Toys': '장난감', 'Gift Cards': '기프트카드', 'Clothes': '옷',
       'Subscriptions': '구독', 'Classes': '수업', 'Tickets': '티켓',
@@ -59,9 +65,13 @@ const STRINGS = {
 };
 
 function App() {
+  const [showPurchased, setShowPurchased] = useState(false);
   const [lang, setLang] = useState(() => localStorage.getItem('lang') || 'en');
   const t = STRINGS[lang];
   const tc = (cat) => t.categories[cat] || cat;
+  const isVisible = (item) =>
+    (selectedCategory === 'All' || item.category === selectedCategory) &&
+    (showPurchased || !item.purchased);
   const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState({ title: '', link: '', quantity: 1, category: 'Books', price: '', secondaryCategory: '' });
   const [isLoading, setIsLoading] = useState(true);
@@ -281,7 +291,7 @@ function App() {
     }
 
     // Get the currently visible/filtered items for reordering
-    const visibleItems = items.filter(item => selectedCategory === 'All' || item.category === selectedCategory);
+    const visibleItems = items.filter(isVisible);
     const draggedIndex = visibleItems.findIndex(item => item.id === draggedItem.id);
     const targetIndex = visibleItems.findIndex(item => item.id === targetItem.id);
 
@@ -350,7 +360,7 @@ function App() {
     }
 
     // Get the currently visible/filtered items for reordering
-    const visibleItems = items.filter(item => selectedCategory === 'All' || item.category === selectedCategory);
+    const visibleItems = items.filter(isVisible);
     const draggedIndex = visibleItems.findIndex(item => item.id === draggedItem.id);
     const targetIndex = visibleItems.findIndex(item => item.id === targetItem.id);
 
@@ -800,15 +810,31 @@ function App() {
                     <option key={cat} value={cat}>{tc(cat)}</option>
                   ))}
               </select>
+              <button
+                type="button"
+                className={`eye-toggle ${showPurchased ? 'active' : ''}`}
+                onClick={() => setShowPurchased(v => !v)}
+                title={showPurchased ? t.hidePurchased : t.showPurchased}
+                aria-label={showPurchased ? t.hidePurchased : t.showPurchased}
+                aria-pressed={showPurchased}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                  {!showPurchased && <line x1="3" y1="3" x2="21" y2="21" />}
+                </svg>
+              </button>
             </div>
           </div>
           
           {items.length === 0 ? (
             <p className="empty-message">{t.empty}</p>
+          ) : items.filter(isVisible).length === 0 ? (
+            <p className="empty-message">{t.allHidden}</p>
           ) : (
             <div className="items-grid">
               {items
-                .filter(item => selectedCategory === 'All' || item.category === selectedCategory)
+                .filter(isVisible)
                 .map((item) => {
                   const totalQuantity = (item.purchasers?.length || 0) + item.quantity;
                   const purchasedCount = item.purchasers?.length || 0;
