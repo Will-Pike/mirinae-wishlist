@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap');
+
+:root {
+  --accent: #5b8def;
+  --accent-dark: #4577d9;
+  --star: #f2b84b;
+}
 
 * {
   margin: 0;
@@ -7,12 +13,34 @@
 }
 
 body {
-  font-family: 'Lato', sans-serif;
+  font-family: 'Gaegu', 'Lato', sans-serif;
+  font-size: 1.1rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
-  background: linear-gradient(90deg, #CCCCFF 0%, #e6ccff 100%);
+  background:
+    radial-gradient(1.5px 1.5px at 12% 18%, #f2b84b 50%, transparent 51%),
+    radial-gradient(1px 1px at 38% 62%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 71% 28%, #f2b84b 50%, transparent 51%),
+    radial-gradient(1px 1px at 86% 74%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 55% 90%, #f2b84b 50%, transparent 51%),
+    linear-gradient(170deg, #d9ebff 0%, #e8ecff 40%, #fbe6f1 100%);
+  background-attachment: fixed;
   min-height: 100vh;
+}
+
+.App.lang-ko {
+  font-family: 'Gaegu', 'Lato', sans-serif;
+  font-size: 1.1rem;
+}
+
+.App .btn,
+.App .input-field,
+.App select,
+.App textarea,
+.modal-content .btn,
+.modal-content .input-field,
+.lang-toggle button {
+  font-family: 'Gaegu', sans-serif;
 }
 
 .App {
@@ -22,9 +50,42 @@ body {
 }
 
 .header {
-  background: white;
+  position: relative;
+  background:
+    radial-gradient(1.5px 1.5px at 8% 30%, var(--star) 50%, transparent 51%),
+    radial-gradient(2px 2px at 22% 70%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 78% 25%, var(--star) 50%, transparent 51%),
+    radial-gradient(2px 2px at 92% 65%, #fff 50%, transparent 51%),
+    linear-gradient(100deg, #cfe5ff 0%, #e6e3fb 50%, #fbdcec 100%);
   padding: 2rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 14px rgba(124, 131, 232, 0.18);
+}
+
+.lang-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  padding: 3px;
+  box-shadow: 0 1px 6px rgba(124, 131, 232, 0.25);
+}
+
+.lang-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lang-toggle button.active {
+  background: var(--accent);
+  color: white;
 }
 
 .header-content {
@@ -41,9 +102,24 @@ body {
 }
 
 .header h1 {
-  color: #667eea;
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 3.1rem;
+  letter-spacing: 0.5px;
+}
+
+.App.lang-ko .header h1 {
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+  font-size: 3.1rem;
+}
+
+.name-ko {
+  font-family: 'Gaegu', sans-serif;
+  font-size: 1.5rem;
+  color: #a58bd6;
+  letter-spacing: 0.3rem;
 }
 
 .subtitle {
@@ -51,19 +127,23 @@ body {
   font-size: 1.1rem;
 }
 
-.admin-emoji {
+.admin-star {
   cursor: pointer;
-  opacity: 0.5;
+  color: var(--star);
+  opacity: 0.7;
   transition: all 0.3s;
   display: inline-block;
   padding: 0 0.25rem;
   border-radius: 8px;
 }
 
-.admin-emoji:hover {
+.admin-star:hover {
   opacity: 1;
-  transform: scale(1.15);
-  background: rgba(102, 126, 234, 0.1);
+  transform: scale(1.2) rotate(15deg);
+}
+
+.admin-star.is-admin {
+  opacity: 1;
 }
 
 .container {
@@ -106,7 +186,7 @@ body {
   padding: 1rem;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 2px dashed #667eea;
+  border: 2px dashed var(--accent);
 }
 
 .input-field {
@@ -119,7 +199,7 @@ body {
 
 .input-field:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--accent);
 }
 
 .category-select {
@@ -141,25 +221,25 @@ body {
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--accent);
   color: white;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: var(--accent-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(124, 131, 232, 0.4);
 }
 
 .btn-secondary {
-  background: #48bb78;
+  background: linear-gradient(135deg, var(--accent) 0%, #8b7fe0 100%);
   color: white;
   font-size: 0.9rem;
   padding: 0.625rem 1rem;
 }
 
 .btn-secondary:hover {
-  background: #38a169;
+  background: linear-gradient(135deg, var(--accent-dark) 0%, #7a6ed0 100%);
 }
 
 .wishlist {
@@ -207,7 +287,7 @@ body {
 
 .filter-select:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--accent);
 }
 
 .empty-message {
@@ -254,7 +334,7 @@ body {
 .item-card.dragging {
   opacity: 0.5;
   transform: scale(0.95);
-  border: 2px dashed #667eea;
+  border: 2px dashed var(--accent);
 }
 
 .item-header {
@@ -367,7 +447,7 @@ body {
 }
 
 .btn-edit {
-  background: #667eea;
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: 50%;
@@ -382,7 +462,7 @@ body {
 }
 
 .btn-edit:hover {
-  background: #5568d3;
+  background: var(--accent-dark);
   transform: scale(1.1);
 }
 
@@ -491,7 +571,7 @@ body {
 
 .item-link {
   display: inline-block;
-  color: #667eea;
+  color: var(--accent);
   text-decoration: none;
   margin-bottom: 1rem;
   font-size: 0.95rem;
@@ -516,8 +596,8 @@ body {
 }
 
 .status-available {
-  color: #48bb78;
-  background: #e6ffed;
+  color: var(--accent-dark);
+  background: #e6efff;
   padding: 0.375rem 0.75rem;
   border-radius: 20px;
   font-size: 0.9rem;
@@ -647,7 +727,7 @@ body {
 }
 
 .collapsible-heading:hover {
-  color: #667eea;
+  color: var(--accent);
 }
 
 .collapse-arrow {
@@ -657,7 +737,7 @@ body {
 }
 
 .collapsible-heading:hover .collapse-arrow {
-  color: #667eea;
+  color: var(--accent);
 }
 
 .purchased-items-grid {
@@ -698,7 +778,7 @@ body {
   background: white;
   padding: 1rem;
   border-radius: 8px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
 }
 
 .purchaser-header {
@@ -711,7 +791,7 @@ body {
 }
 
 .purchaser-header strong {
-  color: #667eea;
+  color: var(--accent);
   font-size: 1rem;
 }
 
@@ -765,9 +845,25 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .header h1 {
-    font-size: 1.6rem;
-    white-space: nowrap;
+  .header {
+    padding: 1rem 1rem 1.5rem;
+  }
+
+  .lang-toggle {
+    position: static;
+    width: fit-content;
+    margin: 0 auto 0.75rem;
+  }
+
+  .header h1,
+  .App.lang-ko .header h1 {
+    font-size: 1.9rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .name-ko {
+    font-size: 1.25rem;
   }
 
   .header-content {

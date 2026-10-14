@@ -1,7 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
+const STRINGS = {
+  en: {
+    title: "Mirinae's Wishlist",
+    loading: 'Loading...',
+    wishlistItems: 'Wishlist Items',
+    available: 'available',
+    filter: 'Filter',
+    allCategories: 'All Categories',
+    empty: 'No items yet. Add some gifts above!',
+    bought: 'I bought this!',
+    allPurchased: 'All Purchased',
+    purchasedOf: (n, total) => `${n} of ${total} purchased`,
+    confirmPurchase: 'Confirm Purchase',
+    confirmText: (title) => <>You're about to mark <strong>{title}</strong> as purchased!</>,
+    yourName: 'Your name (optional)',
+    yourMessage: 'Leave a message for Mirinae (optional)',
+    cancel: 'Cancel',
+    footer: 'Made with love for Mirinae',
+    adminLogin: 'Admin Login',
+    enterPassword: 'Enter password',
+    login: 'Login',
+    categories: {},
+    linkText: {}
+  },
+  ko: {
+    title: '미리내의 위시리스트',
+    loading: '불러오는 중...',
+    wishlistItems: '위시리스트',
+    available: '개 남음',
+    filter: '필터',
+    allCategories: '전체',
+    empty: '아직 선물이 없어요. 위에서 추가해 주세요!',
+    bought: '제가 샀어요!',
+    allPurchased: '모두 구매 완료',
+    purchasedOf: (n, total) => `${total}개 중 ${n}개 구매`,
+    confirmPurchase: '구매 확인',
+    confirmText: (title) => <><strong>{title}</strong>을(를) 구매한 것으로 표시할게요!</>,
+    yourName: '이름 (선택)',
+    yourMessage: '미리내에게 메시지를 남겨주세요 (선택)',
+    cancel: '취소',
+    footer: '미리내를 위해 사랑으로 만들었어요',
+    adminLogin: '관리자 로그인',
+    enterPassword: '비밀번호 입력',
+    login: '로그인',
+    categories: {
+      'Books': '책', 'Toys': '장난감', 'Gift Cards': '기프트카드', 'Clothes': '옷',
+      'Subscriptions': '구독', 'Classes': '수업', 'Tickets': '티켓',
+      'Memberships': '멤버십', 'Cash Gift': '용돈', 'Other': '기타'
+    },
+    linkText: {
+      'Books': '책 보기', 'Toys': '장난감 보기', 'Gift Cards': '기프트카드 보기', 'Clothes': '상품 보기',
+      'Subscriptions': '구독 보기', 'Classes': '수업 보기', 'Tickets': '티켓 보기',
+      'Memberships': '멤버십 보기', 'Cash Gift': '자세히 보기', 'Other': '상품 보기'
+    }
+  }
+};
+
 function App() {
+  const [lang, setLang] = useState(() => localStorage.getItem('lang') || 'en');
+  const t = STRINGS[lang];
+  const tc = (cat) => t.categories[cat] || cat;
   const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState({ title: '', link: '', quantity: 1, category: 'Books', price: '', secondaryCategory: '' });
   const [isLoading, setIsLoading] = useState(true);
@@ -28,6 +88,7 @@ function App() {
   const secondaryCategories = ['Books', 'Toys', 'Gift Cards', 'Clothes', 'Subscriptions', 'Classes', 'Tickets', 'Memberships', 'Other'];
 
   const getCategoryLinkText = (category) => {
+    if (t.linkText[category]) return t.linkText[category];
     const linkText = {
       'Books': 'Buy Book',
       'Toys': 'Buy Toy',
@@ -42,6 +103,11 @@ function App() {
     };
     return linkText[category] || 'View Product';
   };
+
+  useEffect(() => {
+    localStorage.setItem('lang', lang);
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   useEffect(() => {
     fetchItems();
@@ -414,25 +480,29 @@ function App() {
   };
 
   if (isLoading) {
-    return <div className="loading">Loading...</div>;
+    return <div className="loading">{t.loading}</div>;
   }
 
   return (
-    <div className="App">
+    <div className={`App lang-${lang}`}>
       <header className="header">
+        <div className="lang-toggle" role="group" aria-label="Language">
+          <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>EN</button>
+          <button className={lang === 'ko' ? 'active' : ''} onClick={() => setLang('ko')}>한국어</button>
+        </div>
         <div className="header-content">
           <div className="header-text">
             <h1>
-              <span 
-                className="admin-emoji"
+              <span
+                className={`admin-star ${isAdmin ? 'is-admin' : ''}`}
                 onClick={() => !isAdmin ? setShowPasswordPrompt(true) : handleLogout()}
                 title={isAdmin ? "Logout" : "Admin"}
               >
-                {isAdmin ? '🔓' : '💫'}
+                {isAdmin ? '★' : '✦'}
               </span>
-              {' '}Mirinae's Wishlist 🎁
+              {' '}{t.title}
             </h1>
-            {/* <p className="subtitle">Help make Mirinae's wishes come true!</p> */}
+            <p className="name-ko">미리내</p>
           </div>
         </div>
       </header>
@@ -441,18 +511,18 @@ function App() {
       {showPasswordPrompt && (
         <div className="modal-overlay" onClick={() => setShowPasswordPrompt(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Admin Login</h2>
+            <h2>{t.adminLogin}</h2>
             <form onSubmit={handleLogin}>
               <input
                 type="password"
-                placeholder="Enter password"
+                placeholder={t.enterPassword}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
                 autoFocus
               />
               <div className="modal-buttons">
-                <button type="submit" className="btn btn-primary">Login</button>
+                <button type="submit" className="btn btn-primary">{t.login}</button>
                 <button 
                   type="button" 
                   className="btn btn-cancel"
@@ -461,7 +531,7 @@ function App() {
                     setPassword('');
                   }}
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
               </div>
             </form>
@@ -473,20 +543,20 @@ function App() {
       {showPurchaseModal && selectedItemToPurchase && (
         <div className="modal-overlay" onClick={handlePurchaseCancel}>
           <div className="modal-content purchase-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>🎉 Confirm Purchase</h2>
+            <h2>{t.confirmPurchase}</h2>
             <p className="purchase-confirm-text">
-              You're about to mark <strong>{selectedItemToPurchase.title}</strong> as purchased!
+              {t.confirmText(selectedItemToPurchase.title)}
             </p>
             <div className="purchase-form">
               <input
                 type="text"
-                placeholder="Your name (optional)"
+                placeholder={t.yourName}
                 value={purchaserName}
                 onChange={(e) => setPurchaserName(e.target.value)}
                 className="input-field"
               />
               <textarea
-                placeholder="Leave a message for Mirinae (optional)"
+                placeholder={t.yourMessage}
                 value={purchaserMessage}
                 onChange={(e) => setPurchaserMessage(e.target.value)}
                 className="input-field message-textarea"
@@ -499,14 +569,14 @@ function App() {
                 className="btn btn-primary"
                 onClick={handlePurchaseConfirm}
               >
-                Confirm Purchase
+                {t.confirmPurchase}
               </button>
               <button 
                 type="button" 
                 className="btn btn-cancel"
                 onClick={handlePurchaseCancel}
               >
-                Cancel
+                {t.cancel}
               </button>
             </div>
           </div>
@@ -715,26 +785,26 @@ function App() {
 
         <div className="wishlist">
           <div className="wishlist-header">
-            <h2>Wishlist Items ({items.filter(item => !item.purchased).length} available)</h2>
+            <h2>{t.wishlistItems} ({lang === 'en' ? `${items.filter(item => !item.purchased).length} ${t.available}` : `${items.filter(item => !item.purchased).length}${t.available}`})</h2>
             <div className="category-filter">
-              <label>Filter: </label>
+              <label>{t.filter}: </label>
               <select 
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="filter-select"
               >
-                <option value="All">All Categories</option>
+                <option value="All">{t.allCategories}</option>
                 {categories
                   .filter(cat => items.some(item => item.category === cat))
                   .map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                    <option key={cat} value={cat}>{tc(cat)}</option>
                   ))}
               </select>
             </div>
           </div>
           
           {items.length === 0 ? (
-            <p className="empty-message">No items yet. Add some gifts above!</p>
+            <p className="empty-message">{t.empty}</p>
           ) : (
             <div className="items-grid">
               {items
@@ -776,11 +846,11 @@ function App() {
                       <div className="item-header-left">
                         <div className="category-badges">
                           <span className={`category-badge ${(item.category || 'Other').toLowerCase().replace(' ', '-')}`}>
-                            {item.category || 'Other'}
+                            {tc(item.category || 'Other')}
                           </span>
                           {item.category === 'Cash Gift' && item.secondaryCategory && (
                             <span className={`category-badge ${item.secondaryCategory.toLowerCase().replace(' ', '-')}`}>
-                              {item.secondaryCategory}
+                              {tc(item.secondaryCategory)}
                             </span>
                           )}
                         </div>
@@ -834,10 +904,10 @@ function App() {
                       {totalQuantity > 1 && (
                         <div className="quantity-badge">
                           {item.purchased ? (
-                            <span className="status-purchased">✓ All Purchased</span>
+                            <span className="status-purchased">✓ {t.allPurchased}</span>
                           ) : (
                             <span className="status-available">
-                              {purchasedCount} of {totalQuantity} purchased
+                              {t.purchasedOf(purchasedCount, totalQuantity)}
                             </span>
                           )}
                         </div>
@@ -848,7 +918,7 @@ function App() {
                           onClick={() => handlePurchaseClick(item)}
                           className="btn btn-secondary"
                         >
-                          I bought this!
+                          {t.bought}
                         </button>
                       )}
                       
@@ -870,7 +940,7 @@ function App() {
       </div>
 
       <footer className="footer">
-        <p>Made with ❤️ for Mirinae</p>
+        <p>{t.footer}</p>
       </footer>
     </div>
   );
